@@ -1,0 +1,131 @@
+---
+title: Pay Ticket
+api: POST /api/v1/ticket-payments
+description: Register a payment for a winning ticket (total or partial)
+---
+
+## Overview
+
+Registers a payment for a winning ticket. Supports partial payments and idempotency for safe retries. Only tickets in `EVALUATED` status with `isWinner=true` can be paid.
+
+## Authentication
+
+Requires JWT authentication. User role affects RBAC filtering:
+- **ADMIN**: Can pay any ticket
+- **VENTANA**: Can pay tickets from their window
+- **VENDEDOR**: Can pay their own tickets
+
+## Request Body
+
+<ParamField body="ticketId" type="string" required>
+  UUID of the winning ticket to pay
+</ParamField>
+
+<ParamField body="amountPaid" type="number" required>
+  Amount to pay (must be > 0 and ≤ total payout)
+</ParamField>
+
+<ParamField body="method" type="enum" default="cash">
+  Payment method: `cash`, `check`, `transfer`, `system`
+</ParamField>
+
+<ParamField body="isFinal" type="boolean" default="false">
+  Mark as final payment (updates ticket status to PAID)
+</ParamField>
+
+<ParamField body="notes" type="string">
+  Optional notes (max 300 characters)
+</ParamField>
+
+<ParamField body="idempotencyKey" type="string">
+  Unique key for idempotency (min 8, max 100 characters). If key already exists, returns cached payment with `meta.cached: true`
+</ParamField>
+
+<ParamField body="ventanaId" type="string">
+  Optional ventana ID override (admin only)
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  Payment ID (UUID)
+</ResponseField>
+
+<ResponseField name="ticketId" type="string">
+  Ticket ID
+</ResponseField>
+
+<ResponseField name="amountPaid" type="number">
+  Amount paid
+</ResponseField>
+
+<ResponseField name="method" type="string">
+  Payment method
+</ResponseField>
+
+<ResponseField name="isFinal" type="boolean">
+  Whether this is marked as final payment
+</ResponseField>
+
+<ResponseField name="isReversed" type="boolean">
+  Whether this payment has been reversed
+</ResponseField>
+
+<ResponseField name="paidById" type="string">
+  User ID who registered the payment
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp
+</ResponseField>
+
+<ResponseField name="meta.cached" type="boolean">
+  Present if payment was returned from idempotency cache (status 200 instead of 201)
+</ResponseField>
+
+## Status Codes
+
+- `201`: Payment created successfully
+- `200`: Cached payment returned (idempotency key match)
+- `400`: Invalid amount or ticket not in EVALUATED status
+- `403`: RBAC violation (user cannot pay this ticket)
+- `404`: Ticket not found
+- `409`: Ticket is not a winner or already has pending payment
+
+## Example Request
+
+```json
+{
+  "ticketId": "550e8400-e29b-41d4-a716-446655440000",
+  "amountPaid": 50000,
+  "method": "cash",
+  "isFinal": true,
+  "notes": "Pago completo en efectivo",
+  "idempotencyKey": "payment-2024-03-15-001"
+}
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "ticketId": "550e8400-e29b-41d4-a716-446655440000",
+    "amountPaid": 50000,
+    "method": "cash",
+    "isFinal": true,
+    "isReversed": false,
+    "notes": "Pago completo en efectivo",
+    "paidById": "123e4567-e89b-12d3-a456-426614174000",
+    "createdAt": "2024-03-15T10:30:00.000Z"
+  }
+}
+```
+
+## Activity Logging
+
+Logs action `TICKET_PAY` with details:
+- `created`: Whether payment was newly created
+- `cached`: Whether response was from idempotency cache

@@ -1,0 +1,366 @@
+---
+title: Set Commission Policy
+description: Create or update commission policy configuration for bancas, ventanas, or users
+---
+
+## Overview
+
+Update the hierarchical commission policy JSON for a specific entity. Policies define commission percentages based on lottery, bet type, and multiplier ranges.
+
+## Endpoints
+
+### Set Banca Policy
+
+```http
+PUT /api/v1/bancas/:id/commission-policy
+```
+
+**Authorization:** ADMIN only
+
+### Set Ventana Policy
+
+```http
+PUT /api/v1/ventanas/:id/commission-policy
+```
+
+**Authorization:** ADMIN can manage any ventana, VENTANA can manage their own
+
+### Set User Policy
+
+```http
+PUT /api/v1/users/:id/commission-policy
+```
+
+**Authorization:** ADMIN, or VENTANA managing their vendor
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the banca, ventana, or user
+</ParamField>
+
+## Request Body
+
+<ParamField body="commissionPolicyJson" type="object" required>
+  Commission policy configuration (or null to remove policy)
+  
+  <Expandable title="Policy structure">
+    <ParamField body="version" type="number" required>
+      Policy schema version (must be 1)
+    </ParamField>
+    
+    <ParamField body="effectiveFrom" type="string">
+      ISO 8601 date when policy becomes active (null = no start limit)
+    </ParamField>
+    
+    <ParamField body="effectiveTo" type="string">
+      ISO 8601 date when policy expires (null = no end limit)
+      
+      Must be after or equal to `effectiveFrom`
+    </ParamField>
+    
+    <ParamField body="defaultPercent" type="number" required>
+      Default commission percentage (0-100, max 2 decimal places)
+    </ParamField>
+    
+    <ParamField body="rules" type="array" required>
+      Array of commission rules (evaluated in order - first match wins)
+      
+      <Expandable title="Rule structure">
+        <ParamField body="id" type="string">
+          Unique rule identifier (auto-generated if omitted)
+        </ParamField>
+        
+        <ParamField body="loteriaId" type="string" required>
+          Loteria UUID (null = wildcard, matches any loteria)
+        </ParamField>
+        
+        <ParamField body="betType" type="string" required>
+          Bet type: `NUMERO`, `REVENTADO`, or null (wildcard)
+        </ParamField>
+        
+        <ParamField body="multiplierId" type="string">
+          Specific multiplier UUID (optional, for distinguishing multipliers with same value)
+        </ParamField>
+        
+        <ParamField body="multiplierRange" type="object" required>
+          Multiplier range (inclusive)
+          - `min` (number): Minimum multiplier value
+          - `max` (number): Maximum multiplier value
+          
+          **Note:** Currently only specific multipliers are supported (min must equal max)
+        </ParamField>
+        
+        <ParamField body="percent" type="number" required>
+          Commission percentage for this rule (0-100, max 2 decimal places)
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Updated entity with commission policy
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Entity UUID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Entity name
+    </ResponseField>
+    
+    <ResponseField name="code" type="string">
+      Entity code (for banca/ventana)
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      Username (for user only)
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      User role (for user only)
+    </ResponseField>
+    
+    <ResponseField name="commissionPolicyJson" type="object">
+      Updated commission policy configuration
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash Set Banca Policy
+curl -X PUT "https://api.example.com/api/v1/bancas/550e8400-e29b-41d4-a716-446655440000/commission-policy" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "commissionPolicyJson": {
+      "version": 1,
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "defaultPercent": 5.0,
+      "rules": [
+        {
+          "loteriaId": null,
+          "betType": null,
+          "multiplierRange": { "min": 0, "max": 0 },
+          "percent": 5.0
+        }
+      ]
+    }
+  }'
+```
+
+```bash Set Ventana Policy with Specific Rules
+curl -X PUT "https://api.example.com/api/v1/ventanas/660e8400-e29b-41d4-a716-446655440000/commission-policy" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "commissionPolicyJson": {
+      "version": 1,
+      "effectiveFrom": "2025-03-01T00:00:00.000Z",
+      "effectiveTo": "2025-03-31T23:59:59.999Z",
+      "defaultPercent": 7.0,
+      "rules": [
+        {
+          "loteriaId": "loteria-uuid",
+          "betType": "NUMERO",
+          "multiplierId": "multiplier-uuid",
+          "multiplierRange": { "min": 80, "max": 80 },
+          "percent": 10.0
+        },
+        {
+          "loteriaId": null,
+          "betType": "REVENTADO",
+          "multiplierRange": { "min": 500, "max": 500 },
+          "percent": 15.0
+        }
+      ]
+    }
+  }'
+```
+
+```bash Remove Policy
+curl -X PUT "https://api.example.com/api/v1/users/770e8400-e29b-41d4-a716-446655440000/commission-policy" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "commissionPolicyJson": null
+  }'
+```
+</CodeGroup>
+
+## Validation Rules
+
+<AccordionGroup>
+  <Accordion title="Version must be 1">
+    The policy schema version must be exactly `1`. Future versions may support additional features.
+  </Accordion>
+  
+  <Accordion title="Date range validation">
+    If both `effectiveFrom` and `effectiveTo` are provided, `effectiveFrom` must be before or equal to `effectiveTo`.
+  </Accordion>
+  
+  <Accordion title="Percentage precision">
+    All percentage values (`defaultPercent` and rule `percent`) must be between 0-100 with maximum 2 decimal places.
+  </Accordion>
+  
+  <Accordion title="Multiplier range constraint">
+    Currently, only specific multipliers are supported. The `multiplierRange.min` must equal `multiplierRange.max`.
+  </Accordion>
+  
+  <Accordion title="No duplicate rules">
+    Cannot have multiple rules with the same combination of:
+    - `loteriaId` (or both null)
+    - `betType` (or both null)
+    - `multiplierId` or `multiplierRange` value
+    
+    Duplicate rules will result in a validation error.
+  </Accordion>
+  
+  <Accordion title="Rule IDs auto-generated">
+    If a rule does not include an `id` field, a UUID will be automatically generated for tracking purposes.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Note>
+  **Order rules from specific to general**
+  
+  Rules are evaluated in array order with first-match-wins logic. Place more specific rules first:
+  
+  1. Specific loteria + specific bet type + specific multiplier
+  2. Specific loteria + any bet type
+  3. Any loteria + specific bet type
+  4. Catch-all wildcard rule
+</Note>
+
+<Warning>
+  **Policies are snapshot at ticket creation**
+  
+  Commission percentages are frozen when a ticket is created. Updating a policy does **not** affect existing tickets, only new ones created after the update.
+</Warning>
+
+## Response Example
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Banca Central",
+    "code": "BC001",
+    "commissionPolicyJson": {
+      "version": 1,
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "defaultPercent": 5.0,
+      "rules": [
+        {
+          "id": "auto-generated-uuid",
+          "loteriaId": null,
+          "betType": null,
+          "multiplierRange": { "min": 0, "max": 0 },
+          "percent": 5.0
+        }
+      ]
+    }
+  }
+}
+```
+
+## Error Responses
+
+<ResponseExample>
+```json 404 Not Found
+{
+  "success": false,
+  "error": "Ventana no encontrada",
+  "code": "VENTANA_NOT_FOUND"
+}
+```
+
+```json 400 Bad Request - Validation Error
+{
+  "success": false,
+  "error": "Validation failed",
+  "issues": [
+    {
+      "path": ["commissionPolicyJson", "rules"],
+      "message": "Ya existe una regla para este multiplicador en esta lotería y tipo"
+    }
+  ]
+}
+```
+
+```json 400 Bad Request - Date Range
+{
+  "success": false,
+  "error": "Validation failed",
+  "issues": [
+    {
+      "path": ["commissionPolicyJson", "effectiveFrom"],
+      "message": "effectiveFrom must be before or equal to effectiveTo"
+    }
+  ]
+}
+```
+</ResponseExample>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Get Commission Policy" icon="eye" href="/api/commissions/get-policy">
+    Retrieve current commission policy
+  </Card>
+  <Card title="Commission Analytics" icon="chart-line" href="/api/commissions/analytics">
+    View commission metrics and reports
+  </Card>
+</CardGroup>
+
+## Implementation Details
+
+From `src/api/v1/controllers/commission.controller.ts:102-131` and `src/api/v1/validators/commission.validator.ts:86-126`:
+
+```typescript
+async updateBancaCommissionPolicy(req: AuthenticatedRequest, res: Response) {
+  const { id } = req.params;
+  const { commissionPolicyJson } = req.body;
+
+  // Validate that banca exists
+  const banca = await prisma.banca.findUnique({ where: { id } });
+  if (!banca) {
+    throw new AppError("Banca no encontrada", 404, { code: "BANCA_NOT_FOUND" });
+  }
+
+  // Update (Zod already validated and generated UUIDs)
+  const updated = await prisma.banca.update({
+    where: { id },
+    data: { commissionPolicyJson },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      commissionPolicyJson: true,
+    },
+  });
+
+  return success(res, updated);
+}
+```
+
+Validation is performed using Zod schemas that:
+1. Validate policy structure and constraints
+2. Check for duplicate rules
+3. Auto-generate UUIDs for rules without IDs
+4. Remove the read-only `multiplier` field if present

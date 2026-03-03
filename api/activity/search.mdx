@@ -1,0 +1,131 @@
+---
+title: Search Activity Logs
+api: GET /api/v1/activity-logs
+description: Advanced search and filtering of activity logs for audit trails
+---
+
+## Overview
+
+Provides advanced search capabilities for activity logs with multiple filter combinations. Useful for compliance, debugging, and security audits.
+
+## Authentication
+
+Requires JWT authentication with **ADMIN** role.
+
+## Search Capabilities
+
+### Filter Combinations
+
+You can combine multiple filters:
+
+```bash
+# Search by user and date range
+GET /api/v1/activity-logs?userId=abc-123&startDate=2024-03-01T00:00:00Z&endDate=2024-03-15T23:59:59Z
+
+# Search by action and target
+GET /api/v1/activity-logs?action=TICKET_PAY&targetType=TICKET_PAYMENT
+
+# Free text search in details
+GET /api/v1/activity-logs?search=reversal&action=ACCOUNT_PAYMENT_REVERSE
+```
+
+### Sort Options
+
+Logs are sorted by `createdAt` descending (newest first) by default.
+
+## Use Cases
+
+### Audit Trail for User
+
+Track all actions by a specific user:
+
+```bash
+GET /api/v1/activity-logs/user/abc-123?page=1&pageSize=50
+```
+
+### Entity History
+
+Get complete history of a specific entity:
+
+```bash
+GET /api/v1/activity-logs/target/TICKET/ticket-456
+```
+
+### Security Monitoring
+
+Monitor sensitive actions:
+
+```bash
+GET /api/v1/activity-logs?action=ACCOUNT_PAYMENT_REVERSE&startDate=2024-03-01T00:00:00Z
+```
+
+### Troubleshooting
+
+Find logs by request ID:
+
+```bash
+GET /api/v1/activity-logs?search=req-correlation-id-789
+```
+
+## Performance Considerations
+
+- Logs are indexed on `userId`, `action`, `targetType`, `targetId`, and `createdAt`
+- Use specific filters to improve query performance
+- Avoid very large page sizes (recommended max: 100)
+- Date range filters significantly improve performance
+
+## Log Retention
+
+Activity logs are automatically cleaned up after 45 days by default. Admins can:
+1. Configure retention period
+2. Manually trigger cleanup: `POST /api/v1/activity-logs/cleanup`
+3. Export logs before cleanup for long-term archival
+
+## Response Fields Detail
+
+### Details Object
+
+The `details` field varies by action type:
+
+**TICKET_PAY**:
+```json
+{
+  "created": true,
+  "cached": false,
+  "amount": 50000,
+  "method": "cash"
+}
+```
+
+**ACCOUNT_PAYMENT_REVERSE**:
+```json
+{
+  "reason": "Error en monto",
+  "originalAmount": 100000,
+  "originalType": "payment",
+  "reversedAt": "2024-03-15T11:00:00.000Z"
+}
+```
+
+**USER_LOGIN**:
+```json
+{
+  "success": true,
+  "method": "password",
+  "ipAddress": "192.168.1.100"
+}
+```
+
+## Example: Security Audit
+
+```bash
+# Find all payment reversals in last 30 days
+GET /api/v1/activity-logs?action=ACCOUNT_PAYMENT_REVERSE&startDate=2024-02-15T00:00:00Z&endDate=2024-03-15T23:59:59Z&pageSize=100
+```
+
+Response includes:
+- Who reversed payments
+- When reversals occurred
+- Original payment details
+- Reversal reasons
+- IP addresses and user agents

@@ -1,0 +1,481 @@
+---
+title: Multiplier Overrides
+description: Create user and ventana-specific multiplier overrides with priority resolution
+---
+
+## Overview
+
+Multiplier overrides allow you to set custom base multipliers for specific users (vendedores) or ventanas, overriding the default lottery multipliers.
+
+**Use cases:**
+- VIP vendedor incentives
+- Promotional multipliers for specific outlets
+- Testing new multiplier values
+- Regional pricing variations
+
+## Create Override
+
+### Endpoint
+
+```http
+POST /api/v1/multiplier-overrides
+```
+
+**Authorization:** ADMIN, VENTANA (VENTANA can only create for their own ventana)
+
+### Request Body
+
+<ParamField body="scope" type="string" required>
+  Override scope:
+  - `USER`: User-specific override (highest priority)
+  - `VENTANA`: Ventana-wide override
+</ParamField>
+
+<ParamField body="scopeId" type="string" required>
+  UUID of the user or ventana (depending on scope)
+</ParamField>
+
+<ParamField body="loteriaId" type="string" required>
+  UUID of the lottery
+</ParamField>
+
+<ParamField body="multiplierType" type="string" required>
+  Type of multiplier:
+  - `NUMERO`: Standard bet multiplier
+  - `REVENTADO`: REVENTADO multiplier
+  - Or custom type string
+</ParamField>
+
+<ParamField body="baseMultiplierX" type="number" required>
+  Override multiplier value (must be positive, max 9999)
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+```bash Create User Override (VIP Vendedor)
+curl -X POST "https://api.example.com/api/v1/multiplier-overrides" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scope": "USER",
+    "scopeId": "vendedor-uuid",
+    "loteriaId": "loteria-uuid",
+    "multiplierType": "NUMERO",
+    "baseMultiplierX": 85
+  }'
+```
+
+```bash Create Ventana Override
+curl -X POST "https://api.example.com/api/v1/multiplier-overrides" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scope": "VENTANA",
+    "scopeId": "ventana-uuid",
+    "loteriaId": "loteria-uuid",
+    "multiplierType": "NUMERO",
+    "baseMultiplierX": 82
+  }'
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Created multiplier override
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Override UUID
+    </ResponseField>
+    
+    <ResponseField name="scope" type="string">
+      `USER` or `VENTANA`
+    </ResponseField>
+    
+    <ResponseField name="scopeId" type="string">
+      User or ventana UUID
+    </ResponseField>
+    
+    <ResponseField name="loteriaId" type="string">
+      Lottery UUID
+    </ResponseField>
+    
+    <ResponseField name="multiplierType" type="string">
+      Multiplier type
+    </ResponseField>
+    
+    <ResponseField name="baseMultiplierX" type="number">
+      Override multiplier value
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Whether override is active
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      Creation timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      Last update timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Update Override
+
+### Endpoint
+
+```http
+PUT /api/v1/multiplier-overrides/:id
+```
+
+**Authorization:** ADMIN, VENTANA (VENTANA can only update their own overrides)
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the multiplier override
+</ParamField>
+
+### Request Body
+
+<ParamField body="baseMultiplierX" type="number">
+  New multiplier value (must be positive, max 9999)
+</ParamField>
+
+<ParamField body="isActive" type="boolean">
+  Enable or disable the override
+</ParamField>
+
+<Note>
+  At least one field must be provided for update.
+</Note>
+
+### Example
+
+```bash
+curl -X PUT "https://api.example.com/api/v1/multiplier-overrides/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "baseMultiplierX": 87,
+    "isActive": true
+  }'
+```
+
+---
+
+## List Overrides
+
+### Endpoint
+
+```http
+GET /api/v1/multiplier-overrides
+```
+
+**Authorization:** Authenticated users (results filtered by role)
+
+### Query Parameters
+
+<ParamField query="scope" type="string">
+  Filter by scope: `USER` or `VENTANA`
+</ParamField>
+
+<ParamField query="scopeId" type="string">
+  Filter by user or ventana UUID
+</ParamField>
+
+<ParamField query="loteriaId" type="string">
+  Filter by lottery UUID
+</ParamField>
+
+<ParamField query="multiplierType" type="string">
+  Filter by multiplier type
+</ParamField>
+
+<ParamField query="isActive" type="boolean">
+  Filter by active status
+</ParamField>
+
+<ParamField query="page" type="number" default="1">
+  Page number for pagination
+</ParamField>
+
+<ParamField query="pageSize" type="number" default="10">
+  Items per page (max 100)
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+```bash List User Overrides
+curl -X GET "https://api.example.com/api/v1/multiplier-overrides?scope=USER&isActive=true" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash List Overrides for Specific User
+curl -X GET "https://api.example.com/api/v1/multiplier-overrides?scopeId=vendedor-uuid" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash List Overrides for Lottery
+curl -X GET "https://api.example.com/api/v1/multiplier-overrides?loteriaId=loteria-uuid" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of multiplier overrides
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Pagination metadata
+  - `page` (number): Current page
+  - `pageSize` (number): Items per page
+  - `total` (number): Total overrides
+  - `pages` (number): Total pages
+</ResponseField>
+
+---
+
+## Get Override by ID
+
+### Endpoint
+
+```http
+GET /api/v1/multiplier-overrides/:id
+```
+
+**Authorization:** Authenticated users (role-based access)
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the multiplier override
+</ParamField>
+
+### Example
+
+```bash
+curl -X GET "https://api.example.com/api/v1/multiplier-overrides/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+---
+
+## Delete Override (Soft Delete)
+
+### Endpoint
+
+```http
+DELETE /api/v1/multiplier-overrides/:id
+```
+
+**Authorization:** ADMIN, VENTANA (VENTANA can only delete their own overrides)
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the multiplier override
+</ParamField>
+
+### Optional Body
+
+<ParamField body="deletedReason" type="string">
+  Optional reason for deletion (for audit trail)
+</ParamField>
+
+### Example
+
+```bash
+curl -X DELETE "https://api.example.com/api/v1/multiplier-overrides/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "deletedReason": "Promoción finalizada"
+  }'
+```
+
+---
+
+## Restore Override
+
+### Endpoint
+
+```http
+PATCH /api/v1/multiplier-overrides/:id/restore
+```
+
+**Authorization:** ADMIN, VENTANA (VENTANA can only restore their own overrides)
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the multiplier override to restore
+</ParamField>
+
+### Example
+
+```bash
+curl -X PATCH "https://api.example.com/api/v1/multiplier-overrides/550e8400-e29b-41d4-a716-446655440000/restore" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+---
+
+## Resolution Priority
+
+When determining the base multiplier for a ticket, the system follows this hierarchy:
+
+<Steps>
+  <Step title="1. User Multiplier Override">
+    Highest priority - applies to specific vendedor + lottery
+    
+    ```sql
+    SELECT baseMultiplierX FROM MultiplierOverride
+    WHERE scope = 'USER' AND scopeId = userId AND loteriaId = ? AND isActive = true
+    ```
+  </Step>
+  
+  <Step title="2. Ventana Multiplier Override">
+    Second priority - applies to all users in ventana
+    
+    ```sql
+    SELECT baseMultiplierX FROM MultiplierOverride
+    WHERE scope = 'VENTANA' AND scopeId = ventanaId AND loteriaId = ? AND isActive = true
+    ```
+  </Step>
+  
+  <Step title="3. Banca Loteria Setting">
+    Third priority - banca-level setting
+  </Step>
+  
+  <Step title="4. Loteria Multiplier">
+    Fourth priority - lottery default multiplier
+  </Step>
+  
+  <Step title="5. System Default">
+    Lowest priority - global fallback from environment
+  </Step>
+</Steps>
+
+<Info>
+  **First match wins** - the system stops searching as soon as it finds an active override at any level.
+</Info>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use USER overrides sparingly">
+    User overrides are powerful but create exceptions. Use them for:
+    - VIP vendedores with proven track record
+    - Temporary promotional incentives
+    - Testing before rolling out system-wide
+    
+    Document all user overrides and review them regularly.
+  </Accordion>
+  
+  <Accordion title="VENTANA overrides for regional pricing">
+    If different ventanas need different multipliers:
+    - Use VENTANA scope instead of individual USER overrides
+    - Ensures consistency across all vendedores in that outlet
+    - Easier to manage and audit
+  </Accordion>
+  
+  <Accordion title="Set expiration reminders">
+    For promotional overrides, create calendar reminders to:
+    1. Review performance before expiration
+    2. Decide whether to extend or remove
+    3. Clean up inactive overrides
+  </Accordion>
+  
+  <Accordion title="Monitor impact on revenue">
+    Track commission costs and revenue impact:
+    
+    ```sql
+    SELECT scope, scopeId, 
+           COUNT(*) as tickets,
+           SUM(amount) as total_sales,
+           AVG(finalMultiplierX) as avg_multiplier
+    FROM tickets
+    WHERE createdAt >= '2025-03-01'
+    GROUP BY scope, scopeId
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Error Responses
+
+<ResponseExample>
+```json 400 Bad Request - Invalid Scope
+{
+  "success": false,
+  "error": "Validation failed",
+  "issues": [
+    {
+      "path": ["scope"],
+      "message": "scope must be USER or VENTANA"
+    }
+  ]
+}
+```
+
+```json 403 Forbidden - VENTANA Permission
+{
+  "success": false,
+  "error": "VENTANA can only create overrides for their own ventana",
+  "code": "FORBIDDEN"
+}
+```
+
+```json 409 Conflict - Duplicate Override
+{
+  "success": false,
+  "error": "Override already exists for this scope, scopeId, loteriaId, and multiplierType",
+  "code": "DUPLICATE_OVERRIDE"
+}
+```
+</ResponseExample>
+
+## Related Endpoints
+
+<CardGroup cols={3}>
+  <Card title="List Multipliers" icon="list" href="/api/multipliers/list">
+    View base multipliers
+  </Card>
+  <Card title="Create Multiplier" icon="plus" href="/api/multipliers/create">
+    Create lottery multipliers
+  </Card>
+  <Card title="Commission Policies" icon="percent" href="/api/commissions/get-policy">
+    Related hierarchical system
+  </Card>
+</CardGroup>
+
+## Implementation Details
+
+From `src/api/v1/controllers/multiplierOverride.controller.ts:13-17`:
+
+```typescript
+async create(req: Request, res: Response) {
+  const actor = req.user as Actor;
+  const result = await MultiplierOverrideService.create(actor, req.body);
+  return createdResponse(res, result);
+}
+```
+
+Role-based access control is enforced in the service layer, ensuring VENTANA users can only manage overrides for their own ventana.

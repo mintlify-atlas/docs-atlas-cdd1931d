@@ -1,0 +1,114 @@
+---
+title: Sales Breakdown
+api: GET /api/v1/ventas/breakdown
+description: Get sales breakdown by dimension (seller, window, lottery, draw, number)
+---
+
+## Overview
+
+Returns top-N breakdown of sales by specified dimension. Useful for identifying top performers or popular numbers.
+
+## Authentication
+
+Requires JWT authentication. RBAC filtering applies.
+
+## Query Parameters
+
+<ParamField query="dimension" type="enum" required>
+  Breakdown dimension: `vendedor`, `ventana`, `loteria`, `sorteo`, `numero`
+</ParamField>
+
+<ParamField query="top" type="number" default="10">
+  Number of top results (max 50)
+</ParamField>
+
+<ParamField query="date" type="enum" default="today">
+  Date range: `today`, `yesterday`, `week`, `month`, `year`, `range`
+</ParamField>
+
+<ParamField query="fromDate" type="string">
+  Start date `YYYY-MM-DD` (required if `date=range`)
+</ParamField>
+
+<ParamField query="toDate" type="string">
+  End date `YYYY-MM-DD` (required if `date=range`)
+</ParamField>
+
+<ParamField query="ventanaId" type="string">
+  Filter by ventana
+</ParamField>
+
+<ParamField query="loteriaId" type="string">
+  Filter by lottery
+</ParamField>
+
+## Response
+
+<ResponseField name="items" type="array">
+  Breakdown items (top N)
+  
+  <Expandable title="Item structure (varies by dimension)">
+    <ResponseField name="id" type="string">Dimension ID</ResponseField>
+    <ResponseField name="name" type="string">Dimension name</ResponseField>
+    <ResponseField name="sales" type="number">Total sales</ResponseField>
+    <ResponseField name="tickets" type="number">Number of tickets</ResponseField>
+    <ResponseField name="payouts" type="number">Total payouts</ResponseField>
+    <ResponseField name="netRevenue" type="number">Net revenue</ResponseField>
+    <ResponseField name="rank" type="number">Rank position</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="totals" type="object">
+  Aggregate totals
+</ResponseField>
+
+## Example Request
+
+```bash
+GET /api/v1/ventas/breakdown?dimension=vendedor&top=10&date=month
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "abc-123",
+        "name": "Juan Pérez",
+        "sales": 500000,
+        "tickets": 450,
+        "payouts": 250000,
+        "netRevenue": 250000,
+        "rank": 1
+      },
+      {
+        "id": "def-456",
+        "name": "María López",
+        "sales": 450000,
+        "tickets": 380,
+        "payouts": 220000,
+        "netRevenue": 230000,
+        "rank": 2
+      }
+    ],
+    "totals": {
+      "sales": 1500000,
+      "tickets": 1234,
+      "payouts": 800000,
+      "netRevenue": 700000
+    }
+  },
+  "meta": {
+    "range": {
+      "fromAt": "2024-03-01T06:00:00.000Z",
+      "toAt": "2024-04-01T05:59:59.999Z",
+      "tz": "America/Costa_Rica"
+    },
+    "dimension": "vendedor",
+    "topCount": 10
+  }
+}
+```

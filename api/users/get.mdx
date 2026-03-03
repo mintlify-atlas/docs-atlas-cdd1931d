@@ -1,0 +1,180 @@
+---
+title: 'Get User'
+api: 'GET /api/v1/users/:id'
+description: 'Retrieve a specific user by ID. Accessible by ADMIN, self, or VENTANA (for their vendedores).'
+---
+
+## Overview
+
+Retrieves detailed information about a specific user. Users can view their own profile, ADMIN can view any user, and VENTANA users can view their vendedores.
+
+## Authorization
+
+<Info>**Required:** ADMIN, self, or VENTANA (for vendedores in their ventana)</Info>
+
+Permissions enforced by `restrictToAdminSelfOrVentanaVendor` middleware.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the user to retrieve
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The user object (password excluded)
+  
+  <Expandable title="User object">
+    <ResponseField name="id" type="string">
+      UUID of the user
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      User's full name
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      Unique username
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Email address
+    </ResponseField>
+    
+    <ResponseField name="phone" type="string">
+      Phone number
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      User role
+    </ResponseField>
+    
+    <ResponseField name="ventanaId" type="string">
+      Associated ventana UUID
+    </ResponseField>
+    
+    <ResponseField name="code" type="string">
+      User code
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Active status
+    </ResponseField>
+    
+    <ResponseField name="settings" type="object">
+      User-specific settings (print configuration, theme, system preferences)
+    </ResponseField>
+    
+    <ResponseField name="platform" type="string">
+      User platform: "web", "android", or "ios"
+    </ResponseField>
+    
+    <ResponseField name="appVersion" type="string">
+      Application version (e.g., "2.0.7")
+    </ResponseField>
+    
+    <ResponseField name="deletedAt" type="string">
+      Soft delete timestamp (null if active)
+    </ResponseField>
+    
+    <ResponseField name="deletedBy" type="string">
+      User ID who deleted this user (null if active)
+    </ResponseField>
+    
+    <ResponseField name="deletedReason" type="string">
+      Reason for deletion (null if active)
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "success": true,
+  "data": {
+    "id": "770e8400-e29b-41d4-a716-446655440000",
+    "name": "Juan Pérez",
+    "username": "jperez",
+    "email": "jperez@example.com",
+    "phone": "8091234567",
+    "role": "VENDEDOR",
+    "ventanaId": "660e8400-e29b-41d4-a716-446655440000",
+    "code": "V001",
+    "isActive": true,
+    "settings": {
+      "print": {
+        "name": "Mobile Printer",
+        "phone": "8091234567",
+        "width": 58,
+        "footer": "Gracias por su compra",
+        "barcode": true,
+        "bluetoothMacAddress": "12:34:56:78:90:AB"
+      },
+      "theme": "dark",
+      "system": {
+        "notifications": true,
+        "language": "es"
+      }
+    },
+    "platform": "android",
+    "appVersion": "2.0.7",
+    "deletedAt": null,
+    "deletedBy": null,
+    "deletedReason": null,
+    "createdAt": "2024-03-15T12:00:00Z",
+    "updatedAt": "2024-03-15T14:30:00Z"
+  }
+}
+```
+
+```json 404 - Not Found
+{
+  "success": false,
+  "error": "Not Found",
+  "message": "User not found"
+}
+```
+
+```json 403 - Forbidden
+{
+  "success": false,
+  "error": "Forbidden",
+  "message": "You don't have permission to view this user"
+}
+```
+
+```json 400 - Invalid ID
+{
+  "success": false,
+  "error": "Validation failed",
+  "details": [
+    {
+      "field": "id",
+      "message": "Invalid user id"
+    }
+  ]
+}
+```
+</ResponseExample>
+
+## Notes
+
+- Password is never included in response
+- ID must be a valid UUID format
+- Settings object includes print config, theme, and system preferences (see src/api/v1/validators/user.validator.ts:61-67)
+- Middleware ensures VENTANA users can only access their vendedores (see src/api/v1/routes/user.routes.ts:78-82)
+- Returns 404 if user is soft-deleted
+- Implementation: src/api/v1/controllers/user.controller.ts:43-45

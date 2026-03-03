@@ -1,0 +1,93 @@
+---
+title: Account Settlement
+api: POST /api/v1/account-statements
+description: Execute automated account statement settlement
+---
+
+## Overview
+
+Executes automated settlement of account statements based on configured rules. This is typically run as a scheduled job but can be triggered manually by admins.
+
+## Authentication
+
+Requires JWT authentication with **ADMIN** role only.
+
+## Request Body
+
+No request body required. Uses system-configured settlement rules.
+
+## Response
+
+<ResponseField name="processedCount" type="number">
+  Number of statements processed
+</ResponseField>
+
+<ResponseField name="settledCount" type="number">
+  Number of statements marked as settled
+</ResponseField>
+
+<ResponseField name="errors" type="array">
+  List of errors encountered (if any)
+</ResponseField>
+
+<ResponseField name="executedAt" type="string">
+  ISO 8601 timestamp of execution
+</ResponseField>
+
+<ResponseField name="executedById" type="string">
+  User ID who triggered settlement
+</ResponseField>
+
+## Settlement Logic
+
+1. Identifies unsettled statements with balance = 0 or marked as final
+2. Validates settlement conditions
+3. Marks statements as `isSaldado: true`
+4. Logs settlement actions
+
+## Status Codes
+
+- `200`: Settlement executed successfully
+- `403`: Not authorized (requires ADMIN)
+- `500`: Settlement error (check errors array)
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "processedCount": 45,
+    "settledCount": 12,
+    "errors": [],
+    "executedAt": "2024-03-15T12:00:00.000Z",
+    "executedById": "admin-user-123"
+  }
+}
+```
+
+## Configuration Endpoints
+
+### Get Settlement Config
+
+```http
+GET /api/v1/account-statements/config
+```
+
+Returns current settlement configuration.
+
+### Update Settlement Config
+
+```http
+PUT /api/v1/account-statements/config
+```
+
+Update settlement configuration (admin only).
+
+### Health Status
+
+```http
+GET /api/v1/account-statements/health
+```
+
+Returns settlement job health status.

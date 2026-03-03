@@ -1,0 +1,122 @@
+---
+title: Exposure Analysis
+api: GET /api/v1/admin/dashboard/exposure
+description: Analyze financial exposure and risk by number, lottery, or bet type
+---
+
+## Overview
+
+Calculates financial exposure (potential payouts) grouped by numbers, lotteries, or bet types. Identifies high-risk concentrations.
+
+## Authentication
+
+Requires JWT authentication. **VENDEDOR** role is not authorized.
+
+## Query Parameters
+
+<ParamField query="date" type="enum" default="today">
+  Date range preset: `today`, `yesterday`, `week`, `month`, `year`, `range`
+</ParamField>
+
+<ParamField query="fromDate" type="string">
+  Start date in `YYYY-MM-DD` (required if `date=range`)
+</ParamField>
+
+<ParamField query="toDate" type="string">
+  End date in `YYYY-MM-DD` (required if `date=range`)
+</ParamField>
+
+<ParamField query="ventanaId" type="string">
+  Filter by ventana
+</ParamField>
+
+<ParamField query="loteriaId" type="string">
+  Filter by lottery
+</ParamField>
+
+<ParamField query="betType" type="string">
+  Filter by bet type
+</ParamField>
+
+<ParamField query="top" type="number" default="10">
+  Number of top results to return
+</ParamField>
+
+## Response
+
+<ResponseField name="byNumber" type="array">
+  Exposure by number (top N)
+  
+  <Expandable title="Exposure item">
+    <ResponseField name="number" type="string">Lottery number</ResponseField>
+    <ResponseField name="totalBets" type="number">Total amount bet</ResponseField>
+    <ResponseField name="potentialPayout" type="number">Maximum potential payout</ResponseField>
+    <ResponseField name="riskLevel" type="string">Risk level: `low`, `medium`, `high`, `critical`</ResponseField>
+    <ResponseField name="ticketCount" type="number">Number of tickets</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="byLoteria" type="array">
+  Exposure by lottery
+</ResponseField>
+
+<ResponseField name="totals" type="object">
+  Overall exposure totals
+  
+  <Expandable title="properties">
+    <ResponseField name="totalExposure" type="number">Total potential exposure</ResponseField>
+    <ResponseField name="maxSingleExposure" type="number">Largest single exposure</ResponseField>
+    <ResponseField name="highRiskCount" type="number">Count of high-risk items</ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Risk Levels
+
+- **low**: Exposure < 50,000
+- **medium**: 50,000 ≤ Exposure < 100,000
+- **high**: 100,000 ≤ Exposure < 200,000
+- **critical**: Exposure ≥ 200,000
+
+## Example Request
+
+```bash
+GET /api/v1/admin/dashboard/exposure?date=today&top=20
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "byNumber": [
+      {
+        "number": "25",
+        "totalBets": 150000,
+        "potentialPayout": 750000,
+        "riskLevel": "critical",
+        "ticketCount": 45
+      },
+      {
+        "number": "07",
+        "totalBets": 80000,
+        "potentialPayout": 400000,
+        "riskLevel": "high",
+        "ticketCount": 28
+      }
+    ],
+    "totals": {
+      "totalExposure": 2500000,
+      "maxSingleExposure": 750000,
+      "highRiskCount": 5
+    }
+  },
+  "meta": {
+    "range": {
+      "fromAt": "2024-03-15T06:00:00.000Z",
+      "toAt": "2024-03-16T05:59:59.999Z"
+    },
+    "generatedAt": "2024-03-15T12:00:00.000Z"
+  }
+}
+```

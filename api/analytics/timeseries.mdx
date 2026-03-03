@@ -1,0 +1,123 @@
+---
+title: Time Series
+api: GET /api/v1/admin/dashboard/timeseries
+description: Get time-series data for charts and trend analysis
+---
+
+## Overview
+
+Returns time-series data aggregated by hour, day, or week. Optionally includes comparison with previous period.
+
+## Authentication
+
+Requires JWT authentication. **VENDEDOR** role is not authorized.
+
+## Query Parameters
+
+<ParamField query="date" type="enum" default="today">
+  Date range preset: `today`, `yesterday`, `week`, `month`, `year`, `range`
+</ParamField>
+
+<ParamField query="fromDate" type="string">
+  Start date in `YYYY-MM-DD` (required if `date=range`)
+</ParamField>
+
+<ParamField query="toDate" type="string">
+  End date in `YYYY-MM-DD` (required if `date=range`)
+</ParamField>
+
+<ParamField query="interval" type="enum" default="day">
+  Aggregation interval: `hour`, `day`, `week`
+</ParamField>
+
+<ParamField query="granularity" type="enum">
+  Alias for `interval` (frontend compatibility)
+</ParamField>
+
+<ParamField query="compare" type="boolean" default="false">
+  Include comparison with previous period
+</ParamField>
+
+<ParamField query="ventanaId" type="string">
+  Filter by ventana (admin only)
+</ParamField>
+
+<ParamField query="loteriaId" type="string">
+  Filter by lottery
+</ParamField>
+
+<ParamField query="betType" type="string">
+  Filter by bet type
+</ParamField>
+
+## Response
+
+<ResponseField name="series" type="array">
+  Time series data points
+  
+  <Expandable title="Data point">
+    <ResponseField name="timestamp" type="string">ISO 8601 timestamp</ResponseField>
+    <ResponseField name="sales" type="number">Sales for this period</ResponseField>
+    <ResponseField name="payouts" type="number">Payouts for this period</ResponseField>
+    <ResponseField name="tickets" type="number">Number of tickets</ResponseField>
+    <ResponseField name="netProfit" type="number">Net profit</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="comparison" type="array">
+  Previous period comparison data (if `compare=true`)
+</ResponseField>
+
+## Interval Limits
+
+- `hour`: Max 7 days
+- `day`: Max 90 days
+- `week`: Max 365 days
+
+## Example Request
+
+```bash
+GET /api/v1/admin/dashboard/timeseries?date=week&interval=day&compare=true
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "series": [
+      {
+        "timestamp": "2024-03-11T06:00:00.000Z",
+        "sales": 200000,
+        "payouts": 100000,
+        "tickets": 150,
+        "netProfit": 100000
+      },
+      {
+        "timestamp": "2024-03-12T06:00:00.000Z",
+        "sales": 250000,
+        "payouts": 120000,
+        "tickets": 180,
+        "netProfit": 130000
+      }
+    ],
+    "comparison": [
+      {
+        "timestamp": "2024-03-04T06:00:00.000Z",
+        "sales": 180000,
+        "payouts": 90000,
+        "tickets": 140,
+        "netProfit": 90000
+      }
+    ]
+  },
+  "meta": {
+    "range": {
+      "fromAt": "2024-03-11T06:00:00.000Z",
+      "toAt": "2024-03-18T05:59:59.999Z"
+    },
+    "generatedAt": "2024-03-15T12:00:00.000Z"
+  }
+}
+```

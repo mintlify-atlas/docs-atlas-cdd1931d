@@ -1,0 +1,289 @@
+---
+title: Update Sorteo
+description: Update sorteo details, scheduling, and configuration
+---
+
+## PUT/PATCH /api/v1/sorteos/:id
+
+Updates an existing sorteo (lottery draw). Changes are only allowed for sorteos in `SCHEDULED` or `OPEN` status.
+
+<Warning>
+  Sorteos in `EVALUATED` or `CLOSED` status cannot be updated. Use [Revert Evaluation](/api/sorteos/revert-evaluation) to reopen an evaluated sorteo.
+</Warning>
+
+### Authentication
+
+Requires **ADMIN** role.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the sorteo to update
+</ParamField>
+
+### Request Body
+
+All fields are optional. Only provided fields will be updated.
+
+<ParamField body="loteriaId" type="string">
+  Change the associated loteria.
+  
+  <Warning>
+    Can only change loteria when status is `SCHEDULED`. The new loteria must be active.
+  </Warning>
+</ParamField>
+
+<ParamField body="scheduledAt" type="string">
+  Update the scheduled time.
+  
+  ISO 8601 datetime in Costa Rica timezone (GMT-6).
+  
+  Example: `"2025-03-03T14:55:00-06:00"`
+</ParamField>
+
+<ParamField body="name" type="string">
+  Update the display name.
+  
+  Min: 1 character, Max: 100 characters
+</ParamField>
+
+<ParamField body="digits" type="integer">
+  Update the number of digits (2 or 3).
+  
+  <Info>
+    Changing digits affects which winning numbers are valid during evaluation.
+  </Info>
+</ParamField>
+
+<ParamField body="isActive" type="boolean">
+  Activate or deactivate the sorteo.
+  
+  Inactive sorteos are hidden from vendedores and don't accept ticket sales.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the operation was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The updated sorteo object (see [Get Sorteo](/api/sorteos/get) for full structure)
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X PATCH https://api.example.com/api/v1/sorteos/7c9e6679-7425-40de-944b-e07fc1f90ae7 \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Lotto 2:55 PM",
+    "scheduledAt": "2025-03-03T14:55:00-06:00",
+    "isActive": true
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "loteriaId": "550e8400-e29b-41d4-a716-446655440000",
+    "scheduledAt": "2025-03-03T14:55:00-06:00",
+    "name": "Lotto 2:55 PM",
+    "status": "SCHEDULED",
+    "digits": 2,
+    "isActive": true,
+    "reventadoEnabled": true,
+    "winningNumber": null,
+    "hasWinner": false,
+    "createdAt": "2025-03-03T10:00:00-06:00",
+    "updatedAt": "2025-03-03T12:30:00-06:00"
+  }
+}
+```
+
+### Error Responses
+
+<ResponseExample>
+```json Cannot Edit Evaluated
+{
+  "success": false,
+  "error": "No se puede editar un sorteo evaluado o cerrado"
+}
+```
+
+```json Cannot Change Loteria
+{
+  "success": false,
+  "error": "Solo se puede cambiar la lotería en estado SCHEDULED"
+}
+```
+
+```json Loteria Not Active
+{
+  "success": false,
+  "error": "Lotería no encontrada"
+}
+```
+</ResponseExample>
+
+## Update Restrictions by Status
+
+<Tabs>
+  <Tab title="SCHEDULED">
+    **Full Update Access**
+    
+    All fields can be updated:
+    - `loteriaId`
+    - `scheduledAt`
+    - `name`
+    - `digits`
+    - `isActive`
+  </Tab>
+  
+  <Tab title="OPEN">
+    **Limited Update Access**
+    
+    Cannot change:
+    - `loteriaId` (locked to original loteria)
+    
+    Can update:
+    - `name`
+    - `scheduledAt` (with caution)
+    - `digits` (affects future evaluations)
+    - `isActive`
+  </Tab>
+  
+  <Tab title="EVALUATED">
+    **No Updates Allowed**
+    
+    Must use [Revert Evaluation](/api/sorteos/revert-evaluation) first.
+  </Tab>
+  
+  <Tab title="CLOSED">
+    **No Updates Allowed**
+    
+    Terminal state - cannot be modified.
+  </Tab>
+</Tabs>
+
+## Changing Loteria
+
+<Warning>
+  Changing the `loteriaId` is only allowed when the sorteo is in `SCHEDULED` status and has no tickets sold.
+</Warning>
+
+Requirements:
+- Current status must be `SCHEDULED`
+- New loteria must exist and be active
+- New loteria configuration will be inherited
+
+Example:
+
+```json
+{
+  "loteriaId": "new-loteria-uuid"
+}
+```
+
+## Changing Scheduled Time
+
+<Info>
+  Be cautious when changing `scheduledAt` for sorteos that already have tickets sold. Consider communication to vendedores and players.
+</Info>
+
+Best practices:
+
+1. **Before Opening**: Safe to change anytime
+2. **After Opening**: Notify stakeholders of time change
+3. **Close to Draw Time**: Avoid changes - may cause confusion
+
+## Updating Digits
+
+The `digits` field affects:
+
+- Valid winning number range during evaluation
+- Display formatting in UI
+- Ticket validation logic
+
+<CodeGroup>
+```json Change to 2 Digits
+{
+  "digits": 2
+}
+// Valid winning numbers: 00-99
+```
+
+```json Change to 3 Digits
+{
+  "digits": 3  
+}
+// Valid winning numbers: 000-999
+```
+</CodeGroup>
+
+## Activate/Deactivate Sorteo
+
+<Info>
+  Use the dedicated [Set Active](/api/sorteos/set-active) endpoint for bulk activation operations.
+</Info>
+
+Deactivating a sorteo:
+
+```json
+{
+  "isActive": false
+}
+```
+
+Effects:
+- Hidden from vendedor lists
+- Cannot create new tickets
+- Existing tickets remain valid
+- Can be reactivated later
+
+## Activity Logging
+
+All sorteo updates are logged in the activity system with:
+
+- **Action**: `SORTEO_UPDATE`
+- **User**: Admin who made the change
+- **Details**: Changed fields and their new values
+- **Description**: Human-readable summary
+
+Example activity log:
+
+```json
+{
+  "userId": "admin-uuid",
+  "action": "SORTEO_UPDATE",
+  "targetType": "SORTEO",
+  "targetId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "details": {
+    "name": "Lotto 2:55 PM",
+    "scheduledAt": "2025-03-03T14:55:00-06:00",
+    "description": "Actualización de datos para Lotto 2:55 PM (Lotto) del 2025-03-03 14:55:00 -0600"
+  }
+}
+```
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Get Sorteo" icon="file" href="/api/sorteos/get">
+    View current sorteo details
+  </Card>
+  <Card title="Set Active" icon="toggle-on" href="/api/sorteos/set-active">
+    Bulk activate/deactivate
+  </Card>
+  <Card title="Revert Evaluation" icon="rotate-left" href="/api/sorteos/revert-evaluation">
+    Reopen evaluated sorteo
+  </Card>
+  <Card title="Activity Logs" icon="list" href="/api/activity/logs">
+    View audit trail
+  </Card>
+</CardGroup>

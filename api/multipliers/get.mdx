@@ -1,0 +1,183 @@
+---
+title: Get Multiplier
+description: Retrieve details of a specific multiplier by ID
+---
+
+## Overview
+
+Retrieve details of a specific multiplier, including its configuration and relationship to lotteries and sorteos.
+
+## Endpoint
+
+```http
+GET /api/v1/multipliers/:id
+```
+
+**Authorization:** ADMIN only
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the multiplier
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Multiplier details
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Multiplier UUID
+    </ResponseField>
+    
+    <ResponseField name="loteriaId" type="string">
+      Lottery UUID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Multiplier name
+    </ResponseField>
+    
+    <ResponseField name="valueX" type="number">
+      Multiplier value
+    </ResponseField>
+    
+    <ResponseField name="kind" type="string">
+      `NUMERO` or `REVENTADO`
+    </ResponseField>
+    
+    <ResponseField name="appliesToDate" type="string">
+      ISO 8601 date filter (null if applies always)
+    </ResponseField>
+    
+    <ResponseField name="appliesToSorteoId" type="string">
+      Sorteo UUID (null if applies to all sorteos)
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Whether multiplier is active
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      Creation timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      Last update timestamp
+    </ResponseField>
+    
+    <ResponseField name="deletedAt" type="string">
+      Soft deletion timestamp (null if active)
+    </ResponseField>
+    
+    <ResponseField name="loteria" type="object">
+      Lottery details
+      - `id` (string): Lottery UUID
+      - `name` (string): Lottery name
+      - `code` (string): Lottery code
+    </ResponseField>
+    
+    <ResponseField name="sorteo" type="object">
+      Sorteo details (if `appliesToSorteoId` is set)
+      - `id` (string): Sorteo UUID
+      - `drawTime` (string): Draw time
+      - `status` (string): Sorteo status
+    </ResponseField>
+    
+    <ResponseField name="createdBy" type="object">
+      User who created the multiplier
+      - `id` (string): User UUID
+      - `name` (string): User name
+      - `username` (string): Username
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example
+
+```bash
+curl -X GET "https://api.example.com/api/v1/multipliers/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+## Response Example
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "loteriaId": "loteria-uuid",
+    "name": "Base 80x",
+    "valueX": 80,
+    "kind": "NUMERO",
+    "appliesToDate": null,
+    "appliesToSorteoId": null,
+    "isActive": true,
+    "createdAt": "2025-01-01T00:00:00.000Z",
+    "updatedAt": "2025-03-01T10:00:00.000Z",
+    "deletedAt": null,
+    "loteria": {
+      "id": "loteria-uuid",
+      "name": "Lotto",
+      "code": "LOTTO"
+    },
+    "sorteo": null,
+    "createdBy": {
+      "id": "admin-uuid",
+      "name": "Admin User",
+      "username": "admin"
+    }
+  }
+}
+```
+
+## Error Responses
+
+<ResponseExample>
+```json 404 Not Found
+{
+  "success": false,
+  "error": "Multiplier not found",
+  "code": "NOT_FOUND"
+}
+```
+
+```json 403 Forbidden
+{
+  "success": false,
+  "error": "Insufficient permissions",
+  "code": "FORBIDDEN"
+}
+```
+</ResponseExample>
+
+## Related Endpoints
+
+<CardGroup cols={3}>
+  <Card title="List Multipliers" icon="list" href="/api/multipliers/list">
+    View all multipliers
+  </Card>
+  <Card title="Update Multiplier" icon="pen" href="/api/multipliers/update">
+    Modify multiplier
+  </Card>
+  <Card title="Create Multiplier" icon="plus" href="/api/multipliers/create">
+    Create new multiplier
+  </Card>
+</CardGroup>
+
+## Implementation Details
+
+From `src/api/v1/controllers/multiplier.controller.ts:27-30`:
+
+```typescript
+async getById(req: AuthenticatedRequest, res: Response) {
+  const r = await MultiplierService.getById(req.params.id);
+  return res.json({ success: true, data: r });
+}
+```

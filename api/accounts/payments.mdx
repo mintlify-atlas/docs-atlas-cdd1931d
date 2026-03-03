@@ -1,0 +1,155 @@
+---
+title: Account Payments
+api: POST /api/v1/accounts/payment
+description: Register a payment or collection for account settlement
+---
+
+## Overview
+
+Registers a payment (pago) or collection (cobro) to settle account balances. Supports idempotency and returns updated statement.
+
+## Authentication
+
+Requires JWT authentication:
+- **VENDEDOR**: Not authorized
+- **VENTANA**: Can register payments for own window or sellers
+- **ADMIN**: Can register payments for any entity
+
+## Request Body
+
+<ParamField body="date" type="string" required>
+  Payment date in `YYYY-MM-DD` format (cannot be future)
+</ParamField>
+
+<ParamField body="time" type="string">
+  Payment time in `HH:MM` 24-hour format (default: `00:00`). Cannot be future if date is today.
+</ParamField>
+
+<ParamField body="ventanaId" type="string">
+  Window ID (required for window-level payments). Mutually exclusive with `vendedorId` and `bancaId`.
+</ParamField>
+
+<ParamField body="vendedorId" type="string">
+  Seller ID (required for seller-level payments). Mutually exclusive with `ventanaId` and `bancaId`.
+</ParamField>
+
+<ParamField body="bancaId" type="string">
+  Banca ID (admin only, required for banca-level payments). Mutually exclusive with `ventanaId` and `vendedorId`.
+</ParamField>
+
+<ParamField body="amount" type="number" required>
+  Payment amount (must be > 0)
+</ParamField>
+
+<ParamField body="type" type="enum" required>
+  Payment type: `payment` (pago) or `collection` (cobro)
+</ParamField>
+
+<ParamField body="method" type="enum" required>
+  Payment method: `cash`, `check`, `transfer`, `system`
+</ParamField>
+
+<ParamField body="notes" type="string">
+  Optional notes (max 500 characters)
+</ParamField>
+
+<ParamField body="isFinal" type="boolean" default="false">
+  Mark day as settled (saldado)
+</ParamField>
+
+<ParamField body="idempotencyKey" type="string">
+  Unique key for idempotency (min 8 characters). If key exists, returns cached payment.
+</ParamField>
+
+## Response
+
+<ResponseField name="payment" type="object">
+  Created payment record
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">Payment ID</ResponseField>
+    <ResponseField name="date" type="string">Date in `YYYY-MM-DD`</ResponseField>
+    <ResponseField name="time" type="string">Time in `HH:MM`</ResponseField>
+    <ResponseField name="amount" type="number">Amount</ResponseField>
+    <ResponseField name="type" type="string">Type: `payment` or `collection`</ResponseField>
+    <ResponseField name="method" type="string">Payment method</ResponseField>
+    <ResponseField name="isReversed" type="boolean">Reversal status</ResponseField>
+    <ResponseField name="paidById" type="string">User who registered payment</ResponseField>
+    <ResponseField name="createdAt" type="string">ISO 8601 timestamp</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="statement" type="object">
+  Updated account statement for the day
+</ResponseField>
+
+<ResponseField name="meta.cached" type="boolean">
+  Present if payment returned from idempotency cache (status 200 instead of 201)
+</ResponseField>
+
+## Status Codes
+
+- `201`: Payment created successfully
+- `200`: Cached payment returned (idempotency)
+- `400`: Invalid date/time or missing dimension
+- `403`: RBAC violation
+
+## Example Request
+
+```json
+{
+  "date": "2024-03-15",
+  "time": "14:30",
+  "ventanaId": "ventana-001",
+  "amount": 100000,
+  "type": "payment",
+  "method": "cash",
+  "notes": "Pago parcial de ventas del día",
+  "isFinal": false,
+  "idempotencyKey": "payment-2024-03-15-001"
+}
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "payment": {
+      "id": "pay-abc-123",
+      "date": "2024-03-15",
+      "time": "14:30",
+      "amount": 100000,
+      "type": "payment",
+      "method": "cash",
+      "notes": "Pago parcial de ventas del día",
+      "isReversed": false,
+      "isFinal": false,
+      "paidById": "user-123",
+      "createdAt": "2024-03-15T20:30:00.000Z"
+    },
+    "statement": {
+      "id": "stmt-001",
+      "date": "2024-03-15",
+      "totalSales": 500000,
+      "totalPayouts": 250000,
+      "totalPaid": 100000,
+      "remainingBalance": 132500,
+      "isSaldado": false
+    }
+  }
+}
+```
+
+## Validation Rules
+
+1. **Date**: Cannot be future date
+2. **Time**: Cannot be future if date is today (Costa Rica time)
+3. **Dimension**: Must provide exactly one of `bancaId`, `ventanaId`, or `vendedorId`
+4. **Amount**: Must be positive number
+5. **RBAC**: VENTANA users can only register payments for their window/sellers
+
+## Activity Logging
+
+Logs action `ACCOUNT_PAYMENT_CREATE` with payment details.

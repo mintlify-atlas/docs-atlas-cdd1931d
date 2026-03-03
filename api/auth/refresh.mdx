@@ -1,0 +1,181 @@
+---
+title: 'Refresh Token'
+description: 'Exchange a refresh token for a new access token'
+---
+
+## POST /api/v1/auth/refresh
+
+Exchanges a valid refresh token for a new access token and refresh token pair. This endpoint implements token rotation for enhanced security.
+
+### Request Body
+
+<ParamField body="refreshToken" type="string" required>
+  The JWT refresh token received from the login or previous refresh request
+  
+  The token will be revoked and replaced with a new one as part of the rotation process.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  <ResponseField name="accessToken" type="string">
+    New JWT access token for authenticating API requests
+    
+    Include this token in the `Authorization` header as `Bearer <accessToken>`
+  </ResponseField>
+  
+  <ResponseField name="refreshToken" type="string">
+    New JWT refresh token for future token refreshes
+    
+    The old refresh token is automatically revoked and must not be reused.
+  </ResponseField>
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="401 Unauthorized">
+  Invalid, expired, or revoked refresh token
+  
+  ```json
+  {
+    "success": false,
+    "message": "Invalid refresh token"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="403 Forbidden">
+  User account has been deactivated since the token was issued
+  
+  ```json
+  {
+    "success": false,
+    "message": "La cuenta está inactiva.",
+    "meta": "USER_INACTIVE"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="404 Not Found">
+  User associated with the token no longer exists
+  
+  ```json
+  {
+    "success": false,
+    "message": "User not found"
+  }
+  ```
+</ResponseField>
+
+<RequestExample>
+
+```bash cURL
+curl -X POST https://api.example.com/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.example.com/api/v1/auth/refresh', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    refreshToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+  })
+});
+
+const data = await response.json();
+console.log(data.data.accessToken);
+```
+
+```python Python
+import requests
+
+url = "https://api.example.com/api/v1/auth/refresh"
+payload = {
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+
+response = requests.post(url, json=payload)
+data = response.json()
+print(data['data']['accessToken'])
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200 Success
+{
+  "success": true,
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJyb2xlIjoiVkVOREVET1IiLCJ2ZW50YW5hSWQiOiI0NTZlNzg5MC1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDEiLCJiYW5jYUlkIjoiNzg5ZTAxMjMtZTg5Yi0xMmQzLWE0NTYtNDI2NjE0MTc0MDAyIiwiaWF0IjoxNzA5NDcyMDAwLCJleHAiOjE3MDk0NzU2MDB9...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0aWQiOiJhYmNkZWYxMi0zNDU2LTc4OTAtYWJjZC1lZjEyMzQ1Njc4OTAiLCJpYXQiOjE3MDk0NzIwMDAsImV4cCI6MTcxMDA3NjgwMH0..."
+  }
+}
+```
+
+```json 401 Invalid Token
+{
+  "success": false,
+  "message": "Invalid refresh token"
+}
+```
+
+```json 403 Account Inactive
+{
+  "success": false,
+  "message": "La cuenta está inactiva.",
+  "meta": "USER_INACTIVE"
+}
+```
+
+</ResponseExample>
+
+## Token Rotation
+
+This endpoint implements **automatic token rotation** for enhanced security:
+
+1. When you send a valid refresh token, the system:
+   - Validates and decodes the token
+   - Revokes the old refresh token (marked with reason: `rotation`)
+   - Creates a new refresh token with a fresh expiration time
+   - Generates a new access token
+   - Returns both new tokens
+
+2. The operation is **atomic** - both revocation and creation happen in a database transaction:
+   - If the database fails midway, the transaction rolls back
+   - The original token remains valid and you can retry
+   - This prevents token loss during network failures
+
+3. The new refresh token inherits device information from the old one:
+   - `deviceId` - Device UUID
+   - `deviceName` - Human-readable device name
+   - `userAgent` - Updated if provided in request context
+   - `ipAddress` - Updated if provided in request context
+
+## Token Payload
+
+The new access token contains:
+- `sub` - User ID (UUID)
+- `role` - User role (`ADMIN`, `VENTANA`, or `VENDEDOR`)
+- `ventanaId` - Associated ventana ID (null for ADMIN users)
+- `bancaId` - Associated banca ID (derived from ventana, null for ADMIN users)
+- `iat` - Issued at timestamp
+- `exp` - Expiration timestamp
+
+## Best Practices
+
+- **Store tokens securely** - Never expose tokens in URLs or logs
+- **Handle 401 errors** - When you receive a 401, prompt the user to log in again
+- **Refresh proactively** - Refresh tokens before the access token expires (e.g., when you receive a 401 on a protected endpoint)
+- **Don't retry infinitely** - If refresh fails with 401, redirect to login
+- **Update storage** - Always replace both tokens after a successful refresh

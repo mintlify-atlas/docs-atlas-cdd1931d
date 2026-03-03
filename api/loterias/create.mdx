@@ -1,0 +1,377 @@
+---
+title: Create Loteria
+description: Create a new lottery with configuration rules and schedules
+---
+
+## POST /api/v1/loterias
+
+Creates a new loteria (lottery) with optional configuration rules for draw schedules, digits, and REVENTADO settings.
+
+<Info>
+  Loterias define the game rules and schedules. Individual draws (sorteos) are created separately based on the loteria configuration.
+</Info>
+
+### Authentication
+
+Requires authentication. Typically **ADMIN** role for creation.
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  Unique name for the loteria.
+  
+  Examples: `"Lotto"`, `"Tica"`, `"Monazo"`
+  
+  Min: 2 characters
+</ParamField>
+
+<ParamField body="rulesJson" type="object" nullable>
+  Configuration rules for the loteria.
+  
+  <Expandable title="Rules Schema">
+    <ParamField body="digits" type="integer">
+      Number of digits for winning numbers (2 or 3).
+      
+      - `2`: Times/Tiempos (00-99)
+      - `3`: Monazos (000-999)
+      
+      Default: `2`
+    </ParamField>
+    
+    <ParamField body="drawSchedule" type="object">
+      Schedule configuration for automatic sorteo generation.
+      
+      <Expandable title="Schedule Schema">
+        <ParamField body="frequency" type="string">
+          How often draws occur.
+          
+          Values: `"diario"` (daily)
+        </ParamField>
+        
+        <ParamField body="times" type="array">
+          Array of draw times in 24-hour format (Costa Rica timezone).
+          
+          Examples: `["12:55", "18:55"]`
+        </ParamField>
+        
+        <ParamField body="daysOfWeek" type="array">
+          Optional: Specific days of the week.
+          
+          Values: `[0-6]` where 0 = Sunday
+          
+          Example: `[1, 3, 5]` for Mon/Wed/Fri
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    
+    <ParamField body="reventadoConfig" type="object">
+      REVENTADO (extra multiplier) configuration.
+      
+      <Expandable title="Reventado Schema">
+        <ParamField body="enabled" type="boolean">
+          Whether REVENTADO is available for this loteria.
+          
+          Default: `false`
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    
+    <ParamField body="autoCreateSorteos" type="boolean">
+      Whether to auto-generate sorteos from schedule.
+      
+      - `true`: Sorteos are created automatically by cron job
+      - `false`: Sorteos must be created manually
+      
+      Default: `true`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="isActive" type="boolean" default="true">
+  Whether the loteria is active and available for use.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the operation was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The created loteria object
+  
+  <Expandable title="Loteria Object">
+    <ResponseField name="id" type="string">
+      UUID of the loteria
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Loteria name
+    </ResponseField>
+    
+    <ResponseField name="rulesJson" type="object">
+      Configuration rules
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Whether the loteria is active
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of creation
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Request (Simple)
+
+```bash
+curl -X POST https://api.example.com/api/v1/loterias \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Lotto",
+    "isActive": true
+  }'
+```
+
+### Example Request (With Schedule)
+
+```bash
+curl -X POST https://api.example.com/api/v1/loterias \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Lotto",
+    "rulesJson": {
+      "digits": 2,
+      "drawSchedule": {
+        "frequency": "diario",
+        "times": ["12:55", "18:55"]
+      },
+      "reventadoConfig": {
+        "enabled": true
+      },
+      "autoCreateSorteos": true
+    },
+    "isActive": true
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Lotto",
+    "rulesJson": {
+      "digits": 2,
+      "drawSchedule": {
+        "frequency": "diario",
+        "times": ["12:55", "18:55"]
+      },
+      "reventadoConfig": {
+        "enabled": true
+      },
+      "autoCreateSorteos": true
+    },
+    "isActive": true,
+    "createdAt": "2025-03-03T10:00:00-06:00",
+    "updatedAt": "2025-03-03T10:00:00-06:00"
+  }
+}
+```
+
+### Error Responses
+
+<ResponseExample>
+```json Name Too Short
+{
+  "success": false,
+  "error": "El nombre de la lotería debe tener al menos 2 caracteres"
+}
+```
+
+```json Duplicate Name
+{
+  "success": false,
+  "error": "Lotería with name 'Lotto' already exists"
+}
+```
+</ResponseExample>
+
+## Configuration Examples
+
+<CodeGroup>
+```json Times (2 Digits)
+{
+  "name": "Lotto",
+  "rulesJson": {
+    "digits": 2,
+    "drawSchedule": {
+      "frequency": "diario",
+      "times": ["12:55", "18:55"]
+    },
+    "reventadoConfig": {
+      "enabled": true
+    }
+  }
+}
+```
+
+```json Monazos (3 Digits)
+{
+  "name": "Monazo",
+  "rulesJson": {
+    "digits": 3,
+    "drawSchedule": {
+      "frequency": "diario",
+      "times": ["13:00"]
+    },
+    "reventadoConfig": {
+      "enabled": false
+    }
+  }
+}
+```
+
+```json Weekly Schedule
+{
+  "name": "Weekly Draw",
+  "rulesJson": {
+    "digits": 2,
+    "drawSchedule": {
+      "frequency": "diario",
+      "times": ["20:00"],
+      "daysOfWeek": [0, 3, 6]
+    }
+  }
+}
+// Draws on Sunday (0), Wednesday (3), Saturday (6)
+```
+</CodeGroup>
+
+## Draw Schedule Rules
+
+The `drawSchedule` configuration determines when sorteos are automatically created:
+
+<Steps>
+  <Step title="Set Frequency">
+    Currently only `"diario"` (daily) is supported.
+  </Step>
+  
+  <Step title="Define Times">
+    List all draw times in 24-hour format (Costa Rica timezone).
+    
+    Example: `["12:55", "18:55"]` creates 2 draws per day.
+  </Step>
+  
+  <Step title="Optional: Limit Days">
+    Use `daysOfWeek` to restrict to specific days.
+    
+    Omit this field for daily draws on all days.
+  </Step>
+  
+  <Step title="Enable Auto-Creation">
+    Set `autoCreateSorteos: true` to enable automatic generation.
+  </Step>
+</Steps>
+
+## REVENTADO Configuration
+
+<Info>
+  **REVENTADO** is an extra multiplier feature that allows additional payouts on specific numbers.
+</Info>
+
+When `reventadoConfig.enabled: true`:
+
+1. Sorteos created for this loteria will have `reventadoEnabled: true`
+2. Vendedores can sell REVENTADO bets on tickets
+3. During evaluation, admin can specify an `extraMultiplierId` for REVENTADO outcomes
+4. REVENTADO bets on the winning number receive extra payouts
+
+See [Multipliers Guide](/concepts/multipliers) for details.
+
+## Auto-Create Sorteos
+
+The `autoCreateSorteos` flag controls automatic sorteo generation:
+
+<Tabs>
+  <Tab title="Enabled (true)">
+    **Automatic Generation**
+    
+    - Sorteos are created by cron job based on `drawSchedule`
+    - Runs daily (configurable)
+    - Creates sorteos for upcoming dates
+    - Prevents duplicates (idempotent)
+  </Tab>
+  
+  <Tab title="Disabled (false)">
+    **Manual Creation Only**
+    
+    - Sorteos must be created manually via [Create Sorteo](/api/sorteos/create)
+    - Or via [Seed Sorteos](/api/loterias/seed-sorteos) with `forceCreate=true`
+    - Useful for special or irregular draws
+  </Tab>
+</Tabs>
+
+## Activity Logging
+
+Loteria creation is logged:
+
+```json
+{
+  "action": "LOTERIA_CREATE",
+  "targetType": "LOTERIA",
+  "targetId": "loteria-uuid",
+  "details": {
+    "name": "Lotto",
+    "description": "Lotería creada: Lotto"
+  }
+}
+```
+
+## Next Steps
+
+After creating a loteria:
+
+<Steps>
+  <Step title="Create Multipliers">
+    Define multiplier values via [Create Multiplier](/api/multipliers/create).
+  </Step>
+  
+  <Step title="Preview Schedule">
+    Verify sorteo generation with [Preview Schedule](/api/loterias/preview-schedule).
+  </Step>
+  
+  <Step title="Seed Sorteos">
+    Generate initial sorteos via [Seed Sorteos](/api/loterias/seed-sorteos).
+  </Step>
+  
+  <Step title="Configure Auto-Creation">
+    Enable auto-creation cron job for ongoing sorteo generation.
+  </Step>
+</Steps>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="List Loterias" icon="list" href="/api/loterias/list">
+    Get all loterias
+  </Card>
+  <Card title="Preview Schedule" icon="calendar" href="/api/loterias/preview-schedule">
+    Preview generated sorteos
+  </Card>
+  <Card title="Seed Sorteos" icon="seedling" href="/api/loterias/seed-sorteos">
+    Generate sorteos from schedule
+  </Card>
+  <Card title="Create Multiplier" icon="xmark" href="/api/multipliers/create">
+    Define payout multipliers
+  </Card>
+</CardGroup>

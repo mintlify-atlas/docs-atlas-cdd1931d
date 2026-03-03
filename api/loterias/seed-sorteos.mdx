@@ -1,0 +1,485 @@
+---
+title: Seed Sorteos
+description: Automatically generate sorteos from a loteria's schedule configuration
+---
+
+## POST /api/v1/loterias/:id/seed_sorteos
+
+Generates sorteos (lottery draws) based on a loteria's `drawSchedule` configuration. Supports both automatic generation from schedule and manual creation of specific dates.
+
+<Info>
+  This endpoint is **idempotent** - running it multiple times with the same parameters will not create duplicate sorteos.
+</Info>
+
+### Authentication
+
+Requires authentication. Typically **ADMIN** role.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the loteria to seed sorteos for
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="start" type="string" default="now">
+  Start date for sorteo generation.
+  
+  Format: ISO 8601 datetime or date string
+  
+  Examples:
+  - `"2025-03-03T00:00:00-06:00"`
+  - `"2025-03-03"`
+  
+  Default: Current server time
+</ParamField>
+
+<ParamField query="days" type="integer" default="1">
+  Number of days to generate sorteos for.
+  
+  Min: 1, Max: 31
+</ParamField>
+
+<ParamField query="dryRun" type="boolean" default="false">
+  Preview mode - calculate sorteos without creating them.
+  
+  - `true`: Return preview without creating
+  - `false`: Actually create sorteos in database
+</ParamField>
+
+### Request Body
+
+<ParamField body="scheduledDates" type="array" optional>
+  Optional: Specific dates to create sorteos for (overrides schedule calculation).
+  
+  Format: Array of ISO 8601 datetime strings
+  
+  Example:
+  ```json
+  {
+    "scheduledDates": [
+      "2025-03-03T12:55:00-06:00",
+      "2025-03-03T18:55:00-06:00",
+      "2025-03-04T12:55:00-06:00"
+    ]
+  }
+  ```
+  
+  <Info>
+    When provided, only these specific dates are processed. The `start` and `days` parameters are ignored.
+  </Info>
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the operation was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Result summary
+  
+  <Expandable title="Result Object">
+    <ResponseField name="created" type="array | integer">
+      Sorteos created.
+      
+      - Array of sorteo objects (when created)
+      - Integer count (in some responses)
+    </ResponseField>
+    
+    <ResponseField name="skipped" type="array | integer">
+      Sorteos skipped (already exist).
+    </ResponseField>
+    
+    <ResponseField name="alreadyExists" type="array">
+      List of dates that already have sorteos.
+    </ResponseField>
+    
+    <ResponseField name="processed" type="array">
+      All dates that were processed.
+    </ResponseField>
+    
+    <ResponseField name="preview" type="array">
+      Preview data (only in dry run mode).
+    </ResponseField>
+    
+    <ResponseField name="note" type="string" nullable>
+      Additional information or warnings.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Request (From Schedule)
+
+```bash
+curl -X POST "https://api.example.com/api/v1/loterias/550e8400-e29b-41d4-a716-446655440000/seed_sorteos?start=2025-03-03&days=7" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json"
+```
+
+### Example Request (Specific Dates)
+
+```bash
+curl -X POST "https://api.example.com/api/v1/loterias/550e8400-e29b-41d4-a716-446655440000/seed_sorteos" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scheduledDates": [
+      "2025-03-03T12:55:00-06:00",
+      "2025-03-03T18:55:00-06:00"
+    ]
+  }'
+```
+
+### Example Request (Dry Run)
+
+```bash
+curl -X POST "https://api.example.com/api/v1/loterias/550e8400-e29b-41d4-a716-446655440000/seed_sorteos?start=2025-03-03&days=7&dryRun=true" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response (Success)
+
+```json
+{
+  "success": true,
+  "data": {
+    "created": [
+      {
+        "id": "sorteo-uuid-1",
+        "name": "Lotto 12:55",
+        "scheduledAt": "2025-03-03T12:55:00-06:00"
+      },
+      {
+        "id": "sorteo-uuid-2",
+        "name": "Lotto 18:55",
+        "scheduledAt": "2025-03-03T18:55:00-06:00"
+      }
+    ],
+    "skipped": 5,
+    "alreadyExists": [
+      "2025-03-04T12:55:00-06:00",
+      "2025-03-04T18:55:00-06:00"
+    ],
+    "processed": [
+      "2025-03-03T12:55:00-06:00",
+      "2025-03-03T18:55:00-06:00",
+      "2025-03-04T12:55:00-06:00",
+      "2025-03-04T18:55:00-06:00"
+    ]
+  }
+}
+```
+
+### Example Response (Dry Run)
+
+```json
+{
+  "success": true,
+  "data": {
+    "created": [],
+    "skipped": [],
+    "alreadyExists": [],
+    "preview": [
+      {
+        "name": "Lotto 12:55",
+        "scheduledAt": "2025-03-03T12:55:00-06:00"
+      },
+      {
+        "name": "Lotto 18:55",
+        "scheduledAt": "2025-03-03T18:55:00-06:00"
+      }
+    ]
+  }
+}
+```
+
+### Error Responses
+
+<ResponseExample>
+```json Loteria Not Active
+{
+  "success": false,
+  "error": "Lotería inactiva"
+}
+```
+
+```json Invalid Days Range
+{
+  "success": false,
+  "message": "days debe ser 1..31"
+}
+```
+
+```json Auto-Create Disabled
+{
+  "success": true,
+  "data": {
+    "created": 0,
+    "skipped": 0,
+    "note": "autoCreateSorteos=false (usa forceCreate para crear manualmente)"
+  }
+}
+```
+</ResponseExample>
+
+## Seeding Modes
+
+<Tabs>
+  <Tab title="From Schedule">
+    **Automatic Generation**
+    
+    Uses loteria's `drawSchedule` to calculate sorteos:
+    
+    ```bash
+    POST /api/v1/loterias/{id}/seed_sorteos?start=2025-03-03&days=7
+    ```
+    
+    Process:
+    1. Read `drawSchedule` from `rulesJson`
+    2. Calculate occurrences for date range
+    3. Filter by `daysOfWeek` if specified
+    4. Create sorteos for each occurrence
+    5. Skip duplicates (idempotent)
+  </Tab>
+  
+  <Tab title="Specific Dates">
+    **Manual Selection**
+    
+    Provide exact dates to create:
+    
+    ```json
+    {
+      "scheduledDates": [
+        "2025-03-03T12:55:00-06:00",
+        "2025-03-05T20:00:00-06:00"
+      ]
+    }
+    ```
+    
+    Process:
+    1. Use provided dates directly
+    2. Ignore `start` and `days` parameters
+    3. Create sorteos at exact times
+    4. Skip duplicates
+    
+    Use case: Special or irregular draws
+  </Tab>
+</Tabs>
+
+## Auto-Create Flag
+
+<Warning>
+  The `autoCreateSorteos` flag in `rulesJson` controls whether **automatic cron jobs** can seed sorteos. It does NOT block manual seeding via this endpoint.
+</Warning>
+
+<Tabs>
+  <Tab title="Auto-Create Enabled">
+    **`autoCreateSorteos: true`**
+    
+    - Cron jobs can seed this loteria
+    - Manual seeding always works
+    - Default behavior
+  </Tab>
+  
+  <Tab title="Auto-Create Disabled">
+    **`autoCreateSorteos: false`**
+    
+    - Cron jobs skip this loteria
+    - Manual seeding requires special flag
+    - Returns note about manual creation
+    
+    To force manual seeding when disabled, the backend uses `forceCreate: true` flag internally (set automatically for manual API calls).
+  </Tab>
+</Tabs>
+
+## Idempotency
+
+<Info>
+  **Safe to run multiple times** - duplicate sorteos are automatically skipped based on unique constraint: `(loteriaId, scheduledAt)`.
+</Info>
+
+Example:
+
+```bash
+# First run: Creates 14 sorteos
+POST /seed_sorteos?days=7
+# Result: {"created": 14, "skipped": 0}
+
+# Second run: All already exist
+POST /seed_sorteos?days=7
+# Result: {"created": 0, "skipped": 14}
+
+# Overlapping run: Creates only new ones
+POST /seed_sorteos?start=2025-03-06&days=7
+# Result: {"created": 10, "skipped": 4}
+```
+
+## Dry Run Mode
+
+<Info>
+  Use `dryRun=true` to preview what would be created without actually creating sorteos.
+</Info>
+
+Example:
+
+```bash
+curl -X POST ".../seed_sorteos?days=7&dryRun=true"
+```
+
+Response:
+```json
+{
+  "data": {
+    "preview": [
+      {"name": "Lotto 12:55", "scheduledAt": "2025-03-03T12:55:00-06:00"},
+      {"name": "Lotto 18:55", "scheduledAt": "2025-03-03T18:55:00-06:00"}
+    ]
+  }
+}
+```
+
+Use before actual seeding to:
+- Verify schedule calculation
+- Check sorteo names
+- Estimate count
+
+## Inherited Configuration
+
+<Info>
+  Sorteos inherit configuration from the loteria at creation time.
+</Info>
+
+Inherited fields:
+- `digits`: From `rulesJson.digits`
+- `reventadoEnabled`: From `rulesJson.reventadoConfig.enabled`
+- `loteriaId`: Parent loteria
+- `isActive`: Defaults to `true`
+
+Example:
+
+```json
+// Loteria
+{
+  "id": "loteria-uuid",
+  "name": "Lotto",
+  "rulesJson": {
+    "digits": 2,
+    "reventadoConfig": {"enabled": true}
+  }
+}
+
+// Generated Sorteo
+{
+  "id": "sorteo-uuid",
+  "loteriaId": "loteria-uuid",
+  "name": "Lotto 12:55",
+  "digits": 2,
+  "reventadoEnabled": true
+}
+```
+
+## Common Use Cases
+
+<AccordionGroup>
+  <Accordion title="Daily Cron Job" icon="robot">
+    **Automated daily seeding**
+    
+    Cron job runs daily to seed next 3 days:
+    
+    ```bash
+    # Run at 1:30 AM CR time daily
+    POST /seed_sorteos?days=3
+    ```
+    
+    Ensures always have upcoming sorteos ready.
+  </Accordion>
+  
+  <Accordion title="Weekly Batch" icon="calendar-week">
+    **Weekly sorteo generation**
+    
+    Create entire week on Sunday:
+    
+    ```bash
+    POST /seed_sorteos?start=2025-03-03&days=7
+    ```
+  </Accordion>
+  
+  <Accordion title="Initial Setup" icon="seedling">
+    **First-time loteria setup**
+    
+    After creating loteria, seed first month:
+    
+    ```bash
+    POST /seed_sorteos?days=30
+    ```
+  </Accordion>
+  
+  <Accordion title="Special Draw" icon="star">
+    **One-off special draw**
+    
+    Create specific sorteo outside schedule:
+    
+    ```json
+    {
+      "scheduledDates": [
+        "2025-12-31T23:59:00-06:00"
+      ]
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Backfill Missing" icon="fill">
+    **Fix gaps in coverage**
+    
+    After schedule change, backfill missing dates:
+    
+    ```bash
+    POST /seed_sorteos?start=2025-03-01&days=7
+    ```
+    
+    Existing sorteos skipped, only missing ones created.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Steps>
+  <Step title="Preview First">
+    Use [Preview Schedule](/api/loterias/preview-schedule) to verify before seeding.
+  </Step>
+  
+  <Step title="Use Dry Run">
+    Test with `dryRun=true` to see what would be created.
+  </Step>
+  
+  <Step title="Start Small">
+    Begin with 1-3 days, verify, then scale up.
+  </Step>
+  
+  <Step title="Monitor Results">
+    Check `created` vs `skipped` counts to detect issues.
+  </Step>
+  
+  <Step title="Schedule Regular Jobs">
+    Set up cron job to seed upcoming days automatically.
+  </Step>
+</Steps>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Preview Schedule" icon="eye" href="/api/loterias/preview-schedule">
+    Preview before seeding
+  </Card>
+  <Card title="Get Loteria" icon="file" href="/api/loterias/get">
+    View schedule configuration
+  </Card>
+  <Card title="List Sorteos" icon="list" href="/api/sorteos/list">
+    Verify created sorteos
+  </Card>
+  <Card title="Create Sorteo" icon="plus" href="/api/sorteos/create">
+    Manually create individual sorteo
+  </Card>
+</CardGroup>

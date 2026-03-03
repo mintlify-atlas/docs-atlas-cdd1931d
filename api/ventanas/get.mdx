@@ -1,0 +1,154 @@
+---
+title: 'Get Ventana'
+api: 'GET /api/v1/ventanas/:id'
+description: 'Retrieve a specific ventana by ID. Accessible by all authenticated users.'
+---
+
+## Overview
+
+Retrieves detailed information about a specific ventana (betting window).
+
+## Authorization
+
+<Info>**Required:** Valid JWT token (all authenticated users)</Info>
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the ventana to retrieve
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The ventana object
+  
+  <Expandable title="Ventana object">
+    <ResponseField name="id" type="string">
+      UUID of the ventana
+    </ResponseField>
+    
+    <ResponseField name="bancaId" type="string">
+      Parent banca UUID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Ventana name
+    </ResponseField>
+    
+    <ResponseField name="code" type="string">
+      Unique ventana code
+    </ResponseField>
+    
+    <ResponseField name="commissionMarginX" type="number">
+      Commission margin multiplier
+    </ResponseField>
+    
+    <ResponseField name="address" type="string">
+      Physical address
+    </ResponseField>
+    
+    <ResponseField name="phone" type="string">
+      Contact phone
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Contact email
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Active status
+    </ResponseField>
+    
+    <ResponseField name="settings" type="object">
+      Ventana-specific settings (print configuration, theme)
+    </ResponseField>
+    
+    <ResponseField name="deletedAt" type="string">
+      Soft delete timestamp (null if active)
+    </ResponseField>
+    
+    <ResponseField name="deletedBy" type="string">
+      User ID who deleted this ventana (null if active)
+    </ResponseField>
+    
+    <ResponseField name="deletedReason" type="string">
+      Reason for deletion (null if active)
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "success": true,
+  "data": {
+    "id": "660e8400-e29b-41d4-a716-446655440000",
+    "bancaId": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Ventana Norte",
+    "code": "VN001",
+    "commissionMarginX": 1.5,
+    "address": "789 North Avenue",
+    "phone": "+1-234-567-8910",
+    "email": "ventana.norte@example.com",
+    "isActive": true,
+    "settings": {
+      "print": {
+        "name": "Receipt Printer",
+        "phone": "+1-234-567-8910",
+        "width": 58,
+        "footer": "Thank you for your business!",
+        "barcode": true,
+        "bluetoothMacAddress": "AA:BB:CC:DD:EE:FF"
+      },
+      "theme": "light"
+    },
+    "deletedAt": null,
+    "deletedBy": null,
+    "deletedReason": null,
+    "createdAt": "2024-03-15T11:00:00Z",
+    "updatedAt": "2024-03-15T11:00:00Z"
+  }
+}
+```
+
+```json 404 - Not Found
+{
+  "success": false,
+  "error": "Not Found",
+  "message": "Ventana not found"
+}
+```
+
+```json 400 - Invalid ID
+{
+  "success": false,
+  "error": "Validation failed",
+  "details": [
+    {
+      "field": "id",
+      "message": "id inválido (UUID)"
+    }
+  ]
+}
+```
+</ResponseExample>
+
+## Notes
+
+- ID must be a valid UUID format
+- Returns 404 if ventana is soft-deleted
+- Response may include related banca information
+- Implementation: src/api/v1/controllers/ventana.controller.ts:40-43

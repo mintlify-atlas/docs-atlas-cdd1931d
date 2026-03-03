@@ -1,0 +1,489 @@
+---
+title: 'Create Ticket'
+openapi: 'POST /api/v1/tickets'
+---
+
+Creates a new lottery ticket with one or more jugadas (bets). The ticket is created for a specific sorteo (lottery draw) and includes automatic commission calculation, multiplier resolution, and validation against restriction rules.
+
+## Authentication
+
+Requires authentication. Available to roles: `VENDEDOR`, `VENTANA`, `ADMIN`.
+
+## Request Body
+
+<ParamField body="loteriaId" type="string" required>
+  UUID of the lottery (Lotería).
+</ParamField>
+
+<ParamField body="sorteoId" type="string" required>
+  UUID of the draw (Sorteo). Must belong to the specified lottery and not be in `CLOSED` status.
+</ParamField>
+
+<ParamField body="ventanaId" type="string" required>
+  UUID of the sales point (Ventana).
+</ParamField>
+
+<ParamField body="vendedorId" type="string">
+  UUID of the seller (Vendedor). Optional for `ADMIN` and `VENTANA` roles (allows impersonation). `VENDEDOR` users can only specify their own ID or omit this field.
+</ParamField>
+
+<ParamField body="clienteNombre" type="string">
+  Customer name. Optional. Defaults to "CLIENTE CONTADO" if not provided. Max 100 characters.
+</ParamField>
+
+<ParamField body="jugadas" type="array" required>
+  Array of bets (jugadas). At least one jugada is required.
+  
+  <Expandable title="Jugada Object">
+    <ParamField body="number" type="string" required>
+      The lottery number being bet on (e.g., "05", "123"). Length depends on lottery configuration (2 digits for Tiempos, 3 for Monazos).
+    </ParamField>
+    
+    <ParamField body="amount" type="number" required>
+      Bet amount in Costa Rican Colones (₡). Must meet minimum bet requirements defined in the lottery rules.
+    </ParamField>
+    
+    <ParamField body="type" type="string" default="NUMERO">
+      Type of bet. Options:
+      - `NUMERO`: Standard number bet
+      - `REVENTADO`: Extra bet on an existing number in the same ticket
+    </ParamField>
+    
+    <ParamField body="reventadoNumber" type="string">
+      Required if `type` is `REVENTADO`. Must reference a `number` that exists as a `NUMERO` bet in the same ticket.
+    </ParamField>
+    
+    <ParamField body="multiplierId" type="string">
+      UUID of the multiplier to apply. Only allowed for `type=NUMERO`. If omitted, the base multiplier for the lottery is used. The system snapshots the multiplier value at ticket creation time.
+    </ParamField>
+    
+    <ParamField body="finalMultiplierX" type="number">
+      Ignored by the API. This value is calculated server-side based on lottery configuration and selected multiplier.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Response Fields
+
+<ResponseField name="id" type="string">
+  UUID of the created ticket.
+</ResponseField>
+
+<ResponseField name="ticketNumber" type="string">
+  Unique ticket number in format `TYYMMDD-XXXXXX-CC` (e.g., `T250126-00000A-42`). Generated server-side.
+</ResponseField>
+
+<ResponseField name="totalAmount" type="number">
+  Total amount of all jugadas in the ticket.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Ticket status. Will be `ACTIVE` for newly created tickets. Possible values:
+  - `ACTIVE`: Ticket is active
+  - `CANCELLED`: Ticket was cancelled
+  - `EVALUATED`: Sorteo has been evaluated, winners determined
+  - `PAID`: Winner ticket has been paid
+  - `EXCLUDED`: Ticket excluded from reports
+</ResponseField>
+
+<ResponseField name="loteriaId" type="string">
+  UUID of the lottery.
+</ResponseField>
+
+<ResponseField name="sorteoId" type="string">
+  UUID of the sorteo.
+</ResponseField>
+
+<ResponseField name="ventanaId" type="string">
+  UUID of the ventana.
+</ResponseField>
+
+<ResponseField name="vendedorId" type="string">
+  UUID of the vendedor who created the ticket.
+</ResponseField>
+
+<ResponseField name="clienteNombre" type="string">
+  Customer name.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of ticket creation.
+</ResponseField>
+
+<ResponseField name="businessDate" type="string">
+  Business date (Costa Rica timezone) when the ticket was created.
+</ResponseField>
+
+<ResponseField name="totalCommission" type="number">
+  Total commission amount across all jugadas (sum of `commissionAmount` from each jugada).
+</ResponseField>
+
+<ResponseField name="jugadas" type="array">
+  Array of created jugadas with commission snapshots.
+  
+  <Expandable title="Jugada Response Object">
+    <ResponseField name="id" type="string">
+      UUID of the jugada.
+    </ResponseField>
+    
+    <ResponseField name="number" type="string">
+      The bet number.
+    </ResponseField>
+    
+    <ResponseField name="amount" type="number">
+      Bet amount.
+    </ResponseField>
+    
+    <ResponseField name="type" type="string">
+      Bet type: `NUMERO` or `REVENTADO`.
+    </ResponseField>
+    
+    <ResponseField name="reventadoNumber" type="string">
+      The target number for REVENTADO bets. Null for NUMERO bets.
+    </ResponseField>
+    
+    <ResponseField name="multiplierId" type="string">
+      UUID of the applied multiplier. Null if base multiplier was used.
+    </ResponseField>
+    
+    <ResponseField name="finalMultiplierX" type="number">
+      The resolved multiplier value at ticket creation time. This is a snapshot and won't change even if the multiplier is later modified.
+    </ResponseField>
+    
+    <ResponseField name="commissionPercent" type="number">
+      Snapshot of commission percentage applied to this jugada (e.g., 5.5 for 5.5%).
+    </ResponseField>
+    
+    <ResponseField name="commissionAmount" type="number">
+      Snapshot of calculated commission amount in colones.
+    </ResponseField>
+    
+    <ResponseField name="commissionOrigin" type="string">
+      Source of the commission policy. Possible values:
+      - `user`: Commission from vendedor's policy
+      - `ventana`: Commission from ventana's policy
+      - `banca`: Commission from banca's policy
+      - `listero`: Commission from listero (ventana user) policy
+    </ResponseField>
+    
+    <ResponseField name="commissionRuleId" type="string">
+      UUID of the commission rule that was applied. Null if no specific rule matched.
+    </ResponseField>
+    
+    <ResponseField name="listeroCommissionAmount" type="number">
+      Commission amount for the listero (ventana-level user). Calculated from ventana commission policies.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sorteo" type="object">
+  Sorteo details with formatted name.
+  
+  <Expandable title="Sorteo Object">
+    <ResponseField name="id" type="string">
+      Sorteo UUID.
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Formatted sorteo name including scheduled time (e.g., "TICA 7:00 PM").
+    </ResponseField>
+    
+    <ResponseField name="scheduledAt" type="string">
+      ISO 8601 timestamp of when the sorteo is scheduled.
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Sorteo status: `SCHEDULED`, `EVALUATING`, `EVALUATED`, `CLOSED`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="vendedor" type="object">
+  Vendedor information with print configuration.
+  
+  <Expandable title="Vendedor Object">
+    <ResponseField name="id" type="string">
+      Vendedor UUID.
+    </ResponseField>
+    
+    <ResponseField name="printName" type="string">
+      Name to print on tickets. From vendedor's settings or default name.
+    </ResponseField>
+    
+    <ResponseField name="printPhone" type="string">
+      Phone to print on tickets.
+    </ResponseField>
+    
+    <ResponseField name="printWidth" type="number">
+      Print width configuration.
+    </ResponseField>
+    
+    <ResponseField name="printFooter" type="string">
+      Custom footer text for printed tickets.
+    </ResponseField>
+    
+    <ResponseField name="printBarcode" type="boolean">
+      Whether to print barcode on tickets.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="ventana" type="object">
+  Ventana information with print configuration (same structure as vendedor).
+</ResponseField>
+
+<ResponseField name="warnings" type="array">
+  Optional array of warning messages (e.g., commission calculation warnings).
+</ResponseField>
+
+## Validation Rules
+
+### Cutoff Validation
+
+Tickets cannot be created within the cutoff window before a sorteo starts. The cutoff time is determined by:
+
+1. **Restriction Rules** (highest priority): User-specific, ventana-specific, or banca-specific rules
+2. **Banca Settings**: `salesCutoffMinutes` field
+3. **Default**: 1 minute before sorteo start
+
+A grace period of 1 second is applied to the cutoff time.
+
+### Sales Hours Validation
+
+Tickets can only be created within the sales hours defined in the lottery's `rulesJson` configuration.
+
+### Lottery Rules Validation
+
+The ticket must comply with lottery-specific rules including:
+- Minimum bet amounts
+- Number format requirements (2 or 3 digits)
+- Maximum numbers per ticket
+- REVENTADO bet rules
+
+### REVENTADO Validation
+
+For `REVENTADO` bets:
+- A corresponding `NUMERO` bet must exist in the same ticket
+- The `reventadoNumber` must match an existing `number` with `type=NUMERO`
+
+### Multiplier Validation
+
+- Multipliers can only be applied to `NUMERO` bets (not `REVENTADO`)
+- If `multiplierId` is provided, it must be a valid active multiplier for the lottery
+- The multiplier value is snapshotted at creation time
+
+## Commission Calculation
+
+Commissions are calculated automatically for each jugada using a hierarchical policy system:
+
+1. **User Policy**: Vendedor's `commissionPolicyJson`
+2. **Ventana Policy**: Ventana's `commissionPolicyJson`
+3. **Banca Policy**: Banca's `commissionPolicyJson`
+4. **Listero Policy**: Listero user (Role.VENTANA) `commissionPolicyJson`
+
+The first matching rule in the hierarchy is applied and snapshotted as:
+- `commissionPercent`: The percentage rate
+- `commissionAmount`: Calculated amount
+- `commissionOrigin`: Which policy level was used
+- `commissionRuleId`: Specific rule ID
+- `listeroCommissionAmount`: Commission for ventana-level user
+
+These values are immutable snapshots and won't change even if commission policies are later modified.
+
+## RBAC Filtering
+
+### VENDEDOR
+- Can only create tickets for themselves
+- Must have an assigned `ventanaId`
+- `vendedorId` is automatically set to their user ID
+
+### VENTANA
+- Can create tickets for any vendedor in their ventana
+- Must specify `vendedorId` when creating for a vendedor
+- Can only access vendedores assigned to their ventana
+
+### ADMIN
+- Can create tickets for any vendedor in any ventana
+- Must specify both `vendedorId` and `ventanaId`
+- Has full access across all bancas
+
+## Example Request
+
+```bash
+curl -X POST https://api.example.com/api/v1/tickets \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "loteriaId": "123e4567-e89b-12d3-a456-426614174000",
+    "sorteoId": "223e4567-e89b-12d3-a456-426614174000",
+    "ventanaId": "323e4567-e89b-12d3-a456-426614174000",
+    "vendedorId": "423e4567-e89b-12d3-a456-426614174000",
+    "clienteNombre": "Juan Pérez",
+    "jugadas": [
+      {
+        "number": "05",
+        "amount": 1000,
+        "type": "NUMERO",
+        "multiplierId": "523e4567-e89b-12d3-a456-426614174000"
+      },
+      {
+        "number": "12",
+        "amount": 500,
+        "type": "NUMERO"
+      },
+      {
+        "amount": 200,
+        "type": "REVENTADO",
+        "reventadoNumber": "05"
+      }
+    ]
+  }'
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "623e4567-e89b-12d3-a456-426614174000",
+    "ticketNumber": "T260303-00042A-15",
+    "totalAmount": 1700,
+    "status": "ACTIVE",
+    "loteriaId": "123e4567-e89b-12d3-a456-426614174000",
+    "sorteoId": "223e4567-e89b-12d3-a456-426614174000",
+    "ventanaId": "323e4567-e89b-12d3-a456-426614174000",
+    "vendedorId": "423e4567-e89b-12d3-a456-426614174000",
+    "clienteNombre": "Juan Pérez",
+    "createdAt": "2026-03-03T14:30:00.000Z",
+    "businessDate": "2026-03-03",
+    "totalCommission": 93.5,
+    "jugadas": [
+      {
+        "id": "723e4567-e89b-12d3-a456-426614174000",
+        "number": "05",
+        "amount": 1000,
+        "type": "NUMERO",
+        "reventadoNumber": null,
+        "multiplierId": "523e4567-e89b-12d3-a456-426614174000",
+        "finalMultiplierX": 75,
+        "commissionPercent": 5.5,
+        "commissionAmount": 55,
+        "commissionOrigin": "user",
+        "commissionRuleId": "823e4567-e89b-12d3-a456-426614174000",
+        "listeroCommissionAmount": 10
+      },
+      {
+        "id": "823e4567-e89b-12d3-a456-426614174001",
+        "number": "12",
+        "amount": 500,
+        "type": "NUMERO",
+        "reventadoNumber": null,
+        "multiplierId": null,
+        "finalMultiplierX": 70,
+        "commissionPercent": 5.5,
+        "commissionAmount": 27.5,
+        "commissionOrigin": "user",
+        "commissionRuleId": "823e4567-e89b-12d3-a456-426614174000",
+        "listeroCommissionAmount": 5
+      },
+      {
+        "id": "823e4567-e89b-12d3-a456-426614174002",
+        "number": "05",
+        "amount": 200,
+        "type": "REVENTADO",
+        "reventadoNumber": "05",
+        "multiplierId": null,
+        "finalMultiplierX": 75,
+        "commissionPercent": 5.5,
+        "commissionAmount": 11,
+        "commissionOrigin": "user",
+        "commissionRuleId": "823e4567-e89b-12d3-a456-426614174000",
+        "listeroCommissionAmount": 2
+      }
+    ],
+    "sorteo": {
+      "id": "223e4567-e89b-12d3-a456-426614174000",
+      "name": "TICA 7:00 PM",
+      "scheduledAt": "2026-03-03T19:00:00.000Z",
+      "status": "SCHEDULED"
+    },
+    "vendedor": {
+      "id": "423e4567-e89b-12d3-a456-426614174000",
+      "printName": "Vendedor #1",
+      "printPhone": "+506 8888-8888",
+      "printWidth": 48,
+      "printFooter": "Gracias por su compra",
+      "printBarcode": true
+    },
+    "ventana": {
+      "id": "323e4567-e89b-12d3-a456-426614174000",
+      "printName": "Ventana Central",
+      "printPhone": "+506 2222-2222",
+      "printWidth": 48,
+      "printFooter": null,
+      "printBarcode": true
+    }
+  }
+}
+```
+
+## Error Responses
+
+### 400 Bad Request
+
+```json
+{
+  "success": false,
+  "error": "VALIDATION_ERROR",
+  "message": "At least one jugada is required"
+}
+```
+
+### 403 Forbidden
+
+```json
+{
+  "success": false,
+  "error": "FORBIDDEN",
+  "message": "No tienes permiso para vender a nombre de otro usuario"
+}
+```
+
+### 404 Not Found
+
+```json
+{
+  "success": false,
+  "error": "NOT_FOUND",
+  "message": "Sorteo no encontrado"
+}
+```
+
+### 409 Conflict - Cutoff Exceeded
+
+```json
+{
+  "success": false,
+  "error": "CONFLICT",
+  "message": "Venta bloqueada: faltan 0 min para el sorteo (cutoff=1 min, source=DEFAULT)"
+}
+```
+
+### 409 Conflict - Sorteo Closed
+
+```json
+{
+  "success": false,
+  "error": "CONFLICT",
+  "message": "No se pueden crear tickets en un sorteo cerrado"
+}
+```
+
+## Notes
+
+- All timestamps are in UTC but business date calculations use Costa Rica timezone (America/Costa_Rica)
+- Commission snapshots are immutable and provide historical accuracy
+- Multiplier values are resolved and snapshotted at creation time
+- The `ticketNumber` is generated server-side using a sequential counter with check digits
+- Activity logs are created automatically for audit trail

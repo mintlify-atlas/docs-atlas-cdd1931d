@@ -1,0 +1,284 @@
+---
+title: Get Sorteo
+description: Retrieve a single sorteo by ID with full details
+---
+
+## GET /api/v1/sorteos/:id
+
+Retrieves detailed information about a specific sorteo (lottery draw) by its UUID.
+
+### Authentication
+
+Requires authentication. Available to all roles.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the sorteo to retrieve
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the operation was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The sorteo object with full details
+  
+  <Expandable title="Sorteo Object">
+    <ResponseField name="id" type="string">
+      UUID of the sorteo
+    </ResponseField>
+    
+    <ResponseField name="loteriaId" type="string">
+      UUID of the associated loteria
+    </ResponseField>
+    
+    <ResponseField name="scheduledAt" type="string">
+      ISO 8601 datetime in Costa Rica timezone
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Display name of the sorteo
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Current status: `SCHEDULED`, `OPEN`, `EVALUATED`, or `CLOSED`
+    </ResponseField>
+    
+    <ResponseField name="digits" type="integer">
+      Number of digits for winning numbers (2 or 3)
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Whether the sorteo is active
+    </ResponseField>
+    
+    <ResponseField name="reventadoEnabled" type="boolean">
+      Whether REVENTADO (extra multiplier) is enabled
+    </ResponseField>
+    
+    <ResponseField name="winningNumber" type="string" nullable>
+      Winning number (null if not evaluated)
+    </ResponseField>
+    
+    <ResponseField name="hasWinner" type="boolean">
+      Whether there are winning tickets
+    </ResponseField>
+    
+    <ResponseField name="extraMultiplierId" type="string" nullable>
+      UUID of the extra multiplier used (REVENTADO)
+    </ResponseField>
+    
+    <ResponseField name="extraMultiplierX" type="number" nullable>
+      Value of the extra multiplier applied
+    </ResponseField>
+    
+    <ResponseField name="extraOutcomeCode" type="string" nullable>
+      Outcome code for the extra multiplier
+    </ResponseField>
+    
+    <ResponseField name="loteria" type="object">
+      Associated loteria details
+      
+      <Expandable title="Loteria Object">
+        <ResponseField name="id" type="string">
+          Loteria UUID
+        </ResponseField>
+        
+        <ResponseField name="name" type="string">
+          Loteria name
+        </ResponseField>
+        
+        <ResponseField name="rulesJson" type="object">
+          Loteria configuration rules (includes digits, drawSchedule, reventadoConfig)
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="extraMultiplier" type="object" nullable>
+      Extra multiplier details if applied
+      
+      <Expandable title="Multiplier Object">
+        <ResponseField name="id" type="string">
+          Multiplier UUID
+        </ResponseField>
+        
+        <ResponseField name="name" type="string">
+          Multiplier name
+        </ResponseField>
+        
+        <ResponseField name="valueX" type="number">
+          Multiplier value
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of creation
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl https://api.example.com/api/v1/sorteos/7c9e6679-7425-40de-944b-e07fc1f90ae7 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "loteriaId": "550e8400-e29b-41d4-a716-446655440000",
+    "scheduledAt": "2025-03-03T12:55:00-06:00",
+    "name": "Lotto 12:55 PM",
+    "status": "EVALUATED",
+    "digits": 2,
+    "isActive": true,
+    "reventadoEnabled": true,
+    "winningNumber": "42",
+    "hasWinner": true,
+    "extraMultiplierId": "a1b2c3d4-e5f6-4a5b-9c8d-1e2f3a4b5c6d",
+    "extraMultiplierX": 5,
+    "extraOutcomeCode": "REVENTADO x5",
+    "loteria": {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Lotto",
+      "rulesJson": {
+        "digits": 2,
+        "drawSchedule": {
+          "frequency": "diario",
+          "times": ["12:55", "18:55"]
+        },
+        "reventadoConfig": {
+          "enabled": true
+        }
+      }
+    },
+    "extraMultiplier": {
+      "id": "a1b2c3d4-e5f6-4a5b-9c8d-1e2f3a4b5c6d",
+      "name": "REVENTADO x5",
+      "valueX": 5
+    },
+    "createdAt": "2025-03-03T10:00:00-06:00",
+    "updatedAt": "2025-03-03T13:00:00-06:00"
+  }
+}
+```
+
+### Error Responses
+
+<ResponseExample>
+```json Not Found
+{
+  "success": false,
+  "error": "Sorteo no encontrado"
+}
+```
+
+```json Invalid UUID
+{
+  "success": false,
+  "error": "id inválido (UUID)"
+}
+```
+</ResponseExample>
+
+## Understanding Sorteo Status
+
+The `status` field indicates the current lifecycle state:
+
+<AccordionGroup>
+  <Accordion title="SCHEDULED" icon="calendar">
+    Sorteo is created and waiting to be opened. No ticket sales yet.
+    
+    **Allowed Operations:**
+    - Update sorteo details
+    - Open sorteo
+    - Delete/deactivate sorteo
+  </Accordion>
+  
+  <Accordion title="OPEN" icon="door-open">
+    Sorteo is accepting ticket sales. Vendedores can create tickets.
+    
+    **Allowed Operations:**
+    - Create tickets
+    - Close sorteo
+    - Evaluate sorteo (set winning number)
+  </Accordion>
+  
+  <Accordion title="EVALUATED" icon="calculator">
+    Winning number has been set. Winners have been identified.
+    
+    **Allowed Operations:**
+    - Pay winning tickets
+    - Close sorteo
+    - Revert evaluation (admin only)
+  </Accordion>
+  
+  <Accordion title="CLOSED" icon="lock">
+    Sorteo is permanently closed. No further operations allowed.
+    
+    **Terminal State** - Cannot be reopened.
+  </Accordion>
+</AccordionGroup>
+
+## REVENTADO Multipliers
+
+<Info>
+  **REVENTADO** is an extra multiplier feature that can apply additional winnings to specific numbers.
+</Info>
+
+When a sorteo has `reventadoEnabled: true`:
+
+- The loteria has REVENTADO multipliers configured
+- During evaluation, an optional `extraMultiplierId` can be specified
+- Tickets with REVENTADO bets on the winning number get extra payouts
+
+Example flow:
+
+<Steps>
+  <Step title="Sorteo Created">
+    Sorteo is created with `reventadoEnabled: true` (inherited from loteria)
+  </Step>
+  
+  <Step title="Tickets Sold">
+    Vendedores sell tickets with NUMERO and REVENTADO bets
+  </Step>
+  
+  <Step title="Evaluation">
+    Admin evaluates sorteo with `winningNumber: "42"` and `extraMultiplierId: "xxx"`
+  </Step>
+  
+  <Step title="Winners Calculated">
+    - NUMERO bets on "42" win with normal multiplier
+    - REVENTADO bets on "42" win with extra multiplier (e.g., x5)
+  </Step>
+</Steps>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="List Sorteos" icon="list" href="/api/sorteos/list">
+    Get all sorteos with filtering
+  </Card>
+  <Card title="Update Sorteo" icon="pen" href="/api/sorteos/update">
+    Update sorteo details
+  </Card>
+  <Card title="Evaluate Sorteo" icon="calculator" href="/api/sorteos/evaluate">
+    Set winning number
+  </Card>
+  <Card title="Multipliers Guide" icon="xmark" href="/concepts/multipliers">
+    Learn about multiplier system
+  </Card>
+</CardGroup>

@@ -1,0 +1,343 @@
+---
+title: List Restriction Rules
+description: Retrieve restriction rules with filtering and pagination
+---
+
+## Overview
+
+List restriction rules across the system with multi-dimensional filtering. Supports filtering by scope, entity, lottery, number, and active status.
+
+## Endpoint
+
+```http
+GET /api/v1/restrictions
+```
+
+**Authorization:** Authenticated users (ADMIN, VENTANA, VENDEDOR)
+
+<Note>
+  **RBAC filtering is automatic:**
+  - ADMIN with active banca context: filtered by `bancaId`
+  - Other roles: see all rules they have permission to view
+</Note>
+
+## Query Parameters
+
+<ParamField query="bancaId" type="string">
+  Filter by banca UUID
+</ParamField>
+
+<ParamField query="ventanaId" type="string">
+  Filter by ventana UUID
+</ParamField>
+
+<ParamField query="userId" type="string">
+  Filter by user/vendedor UUID
+</ParamField>
+
+<ParamField query="number" type="string">
+  Filter by specific number (e.g., "25")
+</ParamField>
+
+<ParamField query="isActive" type="boolean" default="true">
+  Filter by active status:
+  - `true`: Only active rules
+  - `false`: Only inactive/deleted rules
+  - Omit to see all
+</ParamField>
+
+<ParamField query="hasCutoff" type="boolean">
+  Filter for sales cutoff rules:
+  - `true`: Only rules with `salesCutoffMinutes`
+  - `false`: Rules without cutoff
+</ParamField>
+
+<ParamField query="hasAmount" type="boolean">
+  Filter for amount-based rules:
+  - `true`: Only rules with `maxAmount` or `maxTotal`
+  - `false`: Rules without amount limits
+</ParamField>
+
+<ParamField query="hasAutoDate" type="boolean">
+  Filter for auto-date rules:
+  - `true`: Only rules with `isAutoDate = true`
+  - `false`: Static date rules
+</ParamField>
+
+<ParamField query="page" type="number" default="1">
+  Page number for pagination (min: 1)
+</ParamField>
+
+<ParamField query="pageSize" type="number" default="20">
+  Items per page (min: 1, max: 100)
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of restriction rules
+  
+  <Expandable title="Rule properties">
+    <ResponseField name="id" type="string">
+      Rule UUID
+    </ResponseField>
+    
+    <ResponseField name="bancaId" type="string">
+      Banca UUID (null if not banca-scoped)
+    </ResponseField>
+    
+    <ResponseField name="ventanaId" type="string">
+      Ventana UUID (null if not ventana-scoped)
+    </ResponseField>
+    
+    <ResponseField name="userId" type="string">
+      User UUID (null if not user-scoped)
+    </ResponseField>
+    
+    <ResponseField name="restrictionType" type="string">
+      Rule type label (optional)
+    </ResponseField>
+    
+    <ResponseField name="number" type="string">
+      Restricted number (null if global)
+    </ResponseField>
+    
+    <ResponseField name="isAutoDate" type="boolean">
+      Whether auto-date is enabled
+    </ResponseField>
+    
+    <ResponseField name="maxAmount" type="number">
+      Maximum amount per jugada (null if not set)
+    </ResponseField>
+    
+    <ResponseField name="maxTotal" type="number">
+      Maximum total per ticket (null if not set)
+    </ResponseField>
+    
+    <ResponseField name="baseAmount" type="number">
+      Base amount for dynamic limits (null if not set)
+    </ResponseField>
+    
+    <ResponseField name="salesPercentage" type="number">
+      Sales percentage for dynamic limits (null if not set)
+    </ResponseField>
+    
+    <ResponseField name="appliesToVendedor" type="boolean">
+      Whether percentage applies per-vendedor
+    </ResponseField>
+    
+    <ResponseField name="salesCutoffMinutes" type="number">
+      Minutes before draw to stop sales (null if not set)
+    </ResponseField>
+    
+    <ResponseField name="appliesToDate" type="string">
+      ISO 8601 date filter (null if applies to all dates)
+    </ResponseField>
+    
+    <ResponseField name="appliesToHour" type="number">
+      Hour filter 0-23 (null if applies to all hours)
+    </ResponseField>
+    
+    <ResponseField name="loteriaId" type="string">
+      Lottery UUID (null if not lottery-specific)
+    </ResponseField>
+    
+    <ResponseField name="multiplierId" type="string">
+      Multiplier UUID (null if not multiplier-specific)
+    </ResponseField>
+    
+    <ResponseField name="message" type="string">
+      Custom message (null if not set)
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Whether rule is active
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      Creation timestamp (ISO 8601)
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      Last update timestamp (ISO 8601)
+    </ResponseField>
+    
+    <ResponseField name="deletedAt" type="string">
+      Soft deletion timestamp (null if active)
+    </ResponseField>
+    
+    <ResponseField name="deletedReason" type="string">
+      Reason for deletion (null if active)
+    </ResponseField>
+    
+    <ResponseField name="createdBy" type="object">
+      User who created the rule
+      - `id` (string): User UUID
+      - `name` (string): User name
+      - `username` (string): Username
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Pagination metadata
+  
+  <Expandable title="properties">
+    <ResponseField name="page" type="number">
+      Current page number
+    </ResponseField>
+    
+    <ResponseField name="pageSize" type="number">
+      Items per page
+    </ResponseField>
+    
+    <ResponseField name="total" type="number">
+      Total number of matching rules
+    </ResponseField>
+    
+    <ResponseField name="pages" type="number">
+      Total number of pages
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash List All Active Rules
+curl -X GET "https://api.example.com/api/v1/restrictions" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash List Banca Rules
+curl -X GET "https://api.example.com/api/v1/restrictions?bancaId=550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash List Cutoff Rules
+curl -X GET "https://api.example.com/api/v1/restrictions?hasCutoff=true" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash List Rules for Specific Number
+curl -X GET "https://api.example.com/api/v1/restrictions?number=25&isActive=true" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash Paginated Results
+curl -X GET "https://api.example.com/api/v1/restrictions?page=2&pageSize=50" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "rule-uuid-1",
+      "bancaId": "banca-uuid",
+      "ventanaId": null,
+      "userId": null,
+      "restrictionType": "LIMIT",
+      "number": "25",
+      "isAutoDate": false,
+      "maxAmount": 5000,
+      "maxTotal": null,
+      "baseAmount": null,
+      "salesPercentage": null,
+      "appliesToVendedor": false,
+      "salesCutoffMinutes": null,
+      "appliesToDate": null,
+      "appliesToHour": null,
+      "loteriaId": "loteria-uuid",
+      "multiplierId": null,
+      "message": "Número popular limitado",
+      "isActive": true,
+      "createdAt": "2025-03-01T10:00:00.000Z",
+      "updatedAt": "2025-03-01T10:00:00.000Z",
+      "deletedAt": null,
+      "deletedReason": null,
+      "createdBy": {
+        "id": "admin-uuid",
+        "name": "Admin User",
+        "username": "admin"
+      }
+    },
+    {
+      "id": "rule-uuid-2",
+      "bancaId": "banca-uuid",
+      "ventanaId": null,
+      "userId": null,
+      "restrictionType": "CUTOFF",
+      "number": null,
+      "isAutoDate": false,
+      "maxAmount": null,
+      "maxTotal": null,
+      "baseAmount": null,
+      "salesPercentage": null,
+      "appliesToVendedor": false,
+      "salesCutoffMinutes": 10,
+      "appliesToDate": null,
+      "appliesToHour": null,
+      "loteriaId": "loteria-uuid",
+      "multiplierId": null,
+      "message": null,
+      "isActive": true,
+      "createdAt": "2025-03-01T11:00:00.000Z",
+      "updatedAt": "2025-03-01T11:00:00.000Z",
+      "deletedAt": null,
+      "deletedReason": null,
+      "createdBy": {
+        "id": "admin-uuid",
+        "name": "Admin User",
+        "username": "admin"
+      }
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "pageSize": 20,
+    "total": 2,
+    "pages": 1
+  }
+}
+```
+
+## RBAC Context
+
+From `src/api/v1/controllers/restrictionRule.controller.ts:46-72`:
+
+```typescript
+async list(req: AuthenticatedRequest, res: Response) {
+  const query = req.query as any;
+
+  // If ADMIN with active banca context, filter by bancaId
+  if (req.user!.role === 'ADMIN' && req.bancaContext?.bancaId && req.bancaContext.hasAccess) {
+    query.bancaId = req.bancaContext.bancaId;
+  }
+
+  const result = await RestrictionRuleService.list(query);
+  res.json({ success: true, data: result.data, meta: result.meta });
+}
+```
+
+## Related Endpoints
+
+<CardGroup cols={3}>
+  <Card title="Create Restriction" icon="plus" href="/api/restrictions/create">
+    Create new restriction rule
+  </Card>
+  <Card title="Get Restriction" icon="eye" href="/api/restrictions/get">
+    Get single rule by ID
+  </Card>
+  <Card title="My Restrictions" icon="user" href="/api/restrictions/get">
+    Get effective rules for vendedor
+  </Card>
+</CardGroup>

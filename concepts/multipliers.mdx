@@ -1,0 +1,388 @@
+---
+title: Multipliers
+description: Configurable payout multipliers with hierarchical overrides and snapshot immutability
+---
+
+The Banca Management Backend uses a flexible multiplier system that determines payout amounts for winning bets. Multipliers can be configured at multiple levels with hierarchical resolution.
+
+## What are Multipliers?
+
+A multiplier (represented as `multiplierX` or `finalMultiplierX`) is a numeric value that determines the payout for a winning bet:
+
+```
+Payout = Bet Amount × Multiplier
+```
+
+**Example:**
+- Bet Amount: 100 colones
+- Multiplier: 80
+- Payout if win: 100 × 80 = 8,000 colones
+
+## Multiplier Types
+
+<CardGroup cols={2}>
+  <Card title="Base Multiplier" icon="calculator">
+    Applied to standard NUMERO bets. Resolved hierarchically with 5-level priority.
+  </Card>
+  <Card title="REVENTADO Multiplier" icon="explosion">
+    Applied when a REVENTADO bet wins. Configured per sorteo when evaluating results.
+  </Card>
+</CardGroup>
+
+## Base Multiplier Resolution
+
+When a NUMERO bet is placed, the base multiplier is resolved using a **5-level priority chain** (first match wins):
+
+<Steps>
+  <Step title="1. User Multiplier Override">
+    Individual user-specific override for a specific loteria.
+    
+    ```sql
+    SELECT baseMultiplierX FROM UserMultiplierOverride
+    WHERE userId = ? AND loteriaId = ? AND isActive = true
+    ```
+  </Step>
+  
+  <Step title="2. Banca Loteria Setting">
+    Banca-level setting for a specific loteria.
+    
+    ```sql
+    SELECT baseMultiplierX FROM BancaLoteriaSetting
+    WHERE bancaId = ? AND loteriaId = ?
+    ```
+  </Step>
+  
+  <Step title="3. Loteria Multiplier">
+    Loteria-level multiplier with `name="Base"` or first active `kind="NUMERO"`.
+    
+    ```sql
+    SELECT multiplierX FROM LoteriaMultiplier
+    WHERE loteriaId = ? AND isActive = true AND name = 'Base'
+    ORDER BY createdAt ASC LIMIT 1
+    ```
+  </Step>
+  
+  <Step title="4. Loteria Rules JSON">
+    Fallback value in loteria's `rulesJson.baseMultiplierX`.
+    
+    ```typescript
+    loteria.rulesJson?.baseMultiplierX
+    ```
+  </Step>
+  
+  <Step title="5. System Default">
+    Global environment variable fallback.
+    
+    ```bash
+    MULTIPLIER_BASE_DEFAULT_X=95
+    ```
+  </Step>
+</Steps>
+
+<Info>
+  The resolved multiplier is **frozen as `finalMultiplierX`** in the jugada at ticket creation time, ensuring payout consistency even if multipliers change later.
+</Info>
+
+## Loteria Multipliers
+
+Loteria multipliers are configured per lottery and can have different types:
+
+### Creating a Loteria Multiplier
+
+```bash
+curl -X POST http://localhost:4000/api/v1/multipliers \
+  -H "Authorization: Bearer {adminToken}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "loteriaId": "loteria-uuid",
+    "name": "Base",
+    "kind": "NUMERO",
+    "multiplierX": 80,
+    "isActive": true
+  }'
+```
+
+### Creating a REVENTADO Multiplier
+
+```bash
+curl -X POST http://localhost:4000/api/v1/multipliers \
+  -H "Authorization: Bearer {adminToken}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "loteriaId": "loteria-uuid",
+    "name": "REVENTADO Especial",
+    "kind": "REVENTADO",
+    "multiplierX": 500,
+    "isActive": true,
+    "appliesToSorteoId": "specific-sorteo-uuid"
+  }'
+```
+
+<ParamField path="name" type="string" required>
+  Display name for the multiplier (e.g., "Base", "REVENTADO Especial")
+</ParamField>
+
+<ParamField path="kind" type="enum" required>
+  Type of multiplier: `NUMERO` or `REVENTADO`
+</ParamField>
+
+<ParamField path="multiplierX" type="number" required>
+  Multiplier value (e.g., 80, 500)
+</ParamField>
+
+<ParamField path="isActive" type="boolean">
+  Whether the multiplier is active (default: true)
+</ParamField>
+
+<ParamField path="appliesToSorteoId" type="string">
+  Optional: Restrict to a specific sorteo (used for REVENTADO)
+</ParamField>
+
+## User Multiplier Overrides
+
+Admins can set custom multipliers for specific users and loterias:
+
+```bash
+curl -X POST http://localhost:4000/api/v1/multiplier-overrides \
+  -H "Authorization: Bearer {adminToken}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "vendedor-uuid",
+    "loteriaId": "loteria-uuid",
+    "baseMultiplierX": 85,
+    "isActive": true
+  }'
+```
+
+<Note>
+  User overrides take **highest priority** in the resolution chain, allowing you to give specific vendedores better multipliers as incentives.
+</Note>
+
+## REVENTADO Multipliers
+
+REVENTADO is a special bet type that can win an extra multiplier if the winning number matches the bet number. The REVENTADO multiplier is applied when evaluating a sorteo:
+
+### Evaluating a Sorteo with REVENTADO
+
+```bash
+curl -X PATCH http://localhost:4000/api/v1/sorteos/{sorteoId}/evaluate \
+  -H "Authorization: Bearer {adminToken}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "winningNumber": "42",
+    "extraMultiplierId": "reventado-multiplier-uuid",
+    "extraOutcomeCode": "ROJA"
+  }'
+```
+
+**What happens:**
+
+1. All NUMERO bets on number "42" are marked as winners
+2. All REVENTADO bets on number "42" with matching color receive the extra multiplier
+3. The `extraMultiplierX` value is snapshot to the sorteo and jugadas
+4. Payouts are calculated:
+   - NUMERO: `amount × baseMultiplierX`
+   - REVENTADO (winning): `amount × reventadoMultiplierX`
+
+### REVENTADO Validation
+
+<Warning>
+  When evaluating with REVENTADO:
+  - `extraMultiplierId` must be a valid, active multiplier with `kind="REVENTADO"`
+  - If `appliesToSorteoId` is set on the multiplier, it must match the sorteo being evaluated
+  - The multiplier must belong to the same loteria
+</Warning>
+
+## Multiplier Snapshot Immutability
+
+Multipliers are captured as **immutable snapshots** at critical moments:
+
+### At Ticket Creation (NUMERO)
+
+```typescript
+{
+  "jugadaId": "uuid",
+  "number": "42",
+  "amount": 100,
+  "betType": "NUMERO",
+  "multiplierId": "base-multiplier-uuid",
+  "finalMultiplierX": 80,  // ← Frozen at creation
+  "potentialPayout": 8000   // ← 100 × 80
+}
+```
+
+### At Sorteo Evaluation (REVENTADO)
+
+```typescript
+{
+  "sorteoId": "uuid",
+  "winningNumber": "42",
+  "extraMultiplierId": "reventado-multiplier-uuid",
+  "extraMultiplierX": 500,  // ← Frozen at evaluation
+  "status": "EVALUATED"
+}
+```
+
+REVENTADO jugadas also get the snapshot:
+
+```typescript
+{
+  "jugadaId": "uuid",
+  "number": "42",
+  "amount": 100,
+  "betType": "REVENTADO",
+  "color": "ROJA",
+  "finalMultiplierX": 500,  // ← Updated from sorteo's extraMultiplierX
+  "payout": 50000,          // ← 100 × 500 (if won)
+  "isWinner": true
+}
+```
+
+## Listing Multipliers
+
+```bash
+# List all multipliers for a loteria
+curl "http://localhost:4000/api/v1/multipliers?loteriaId=uuid&isActive=true" \
+  -H "Authorization: Bearer {accessToken}"
+
+# Filter by kind
+curl "http://localhost:4000/api/v1/multipliers?kind=REVENTADO" \
+  -H "Authorization: Bearer {accessToken}"
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid-1",
+      "loteriaId": "loteria-uuid",
+      "name": "Base",
+      "kind": "NUMERO",
+      "multiplierX": 80,
+      "isActive": true,
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "uuid-2",
+      "loteriaId": "loteria-uuid",
+      "name": "REVENTADO Alto",
+      "kind": "REVENTADO",
+      "multiplierX": 500,
+      "isActive": true,
+      "appliesToSorteoId": "sorteo-uuid",
+      "createdAt": "2025-02-15T00:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 2,
+    "totalPages": 1
+  }
+}
+```
+
+## Updating Multipliers
+
+Only ADMIN users can update multipliers:
+
+```bash
+curl -X PATCH http://localhost:4000/api/v1/multipliers/{multiplierId} \
+  -H "Authorization: Bearer {adminToken}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "multiplierX": 85,
+    "isActive": true
+  }'
+```
+
+<Note>
+  Updating a multiplier does **not** affect existing tickets. Only new tickets created after the update will use the new value.
+</Note>
+
+## Configuration in Loteria Rules
+
+You can set a default multiplier in the loteria's `rulesJson`:
+
+```json
+{
+  "name": "Lotto",
+  "rulesJson": {
+    "baseMultiplierX": 80,
+    "allowedBetTypes": ["NUMERO", "REVENTADO"],
+    "reventadoConfig": {
+      "enabled": true,
+      "requiresMatchingNumber": true,
+      "colors": ["ROJA", "VERDE"]
+    }
+  }
+}
+```
+
+This serves as a fallback if no `LoteriaMultiplier` with `name="Base"` exists.
+
+## Environment Configuration
+
+Set a system-wide default multiplier:
+
+```bash
+# .env
+MULTIPLIER_BASE_DEFAULT_X=95
+```
+
+This is used as the **last resort** if no other multiplier source is found.
+
+## Best Practices
+
+<Accordion title="Always create a Base multiplier for each loteria">
+  Ensure every loteria has at least one `LoteriaMultiplier` with `name="Base"` and `kind="NUMERO"` to avoid falling back to environment defaults.
+</Accordion>
+
+<Accordion title="Use user overrides sparingly">
+  User multiplier overrides are powerful but can create inconsistencies. Use them for:
+  - Promotional incentives
+  - VIP vendedores
+  - Testing new multiplier values
+  
+  Document all overrides and review them regularly.
+</Accordion>
+
+<Accordion title="Set REVENTADO multipliers per sorteo">
+  For special draws, create REVENTADO multipliers with `appliesToSorteoId` to ensure they only apply to specific sorteos:
+  
+  ```bash
+  # REVENTADO for specific sorteo
+  {
+    "name": "REVENTADO Especial - Sorteo 12:55",
+    "kind": "REVENTADO",
+    "multiplierX": 600,
+    "appliesToSorteoId": "sorteo-1255-uuid"
+  }
+  ```
+</Accordion>
+
+<Accordion title="Monitor payout exposure">
+  Higher multipliers increase payout exposure. Use the exposure analytics endpoint to monitor risk:
+  
+  ```bash
+  curl "http://localhost:4000/api/v1/admin/dashboard/exposure?sorteoId=uuid" \
+    -H "Authorization: Bearer {adminToken}"
+  ```
+</Accordion>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Sorteo Evaluation" icon="trophy" href="/guides/sorteo-management">
+    How to evaluate sorteos with REVENTADO
+  </Card>
+  <Card title="Ticket Creation" icon="ticket" href="/guides/ticket-creation">
+    How multipliers are applied to tickets
+  </Card>
+  <Card title="Exposure Analytics" icon="chart-line" href="/api/analytics/exposure">
+    Monitor payout risk by multiplier
+  </Card>
+</CardGroup>

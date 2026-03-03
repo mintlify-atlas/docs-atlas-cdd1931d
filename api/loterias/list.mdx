@@ -1,0 +1,276 @@
+---
+title: List Loterias
+description: Get a paginated list of all loterias with filtering options
+---
+
+## GET /api/v1/loterias
+
+Retrieves a list of all loterias (lotteries) with support for pagination, filtering, and search.
+
+### Authentication
+
+Requires authentication. Available to all roles.
+
+### Query Parameters
+
+<ParamField query="page" type="integer" default="1">
+  Page number for pagination (min: 1)
+</ParamField>
+
+<ParamField query="pageSize" type="integer" default="10">
+  Number of items per page (min: 1, max: 100)
+</ParamField>
+
+<ParamField query="isActive" type="boolean">
+  Filter by active status.
+  
+  - `true`: Show only active loterias
+  - `false`: Show only inactive loterias
+  - Omit: Show all loterias
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search by loteria name (case-insensitive).
+  
+  Min: 1 character, Max: 100 characters
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the operation was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of loteria objects
+  
+  <Expandable title="Loteria Object">
+    <ResponseField name="id" type="string">
+      UUID of the loteria
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Loteria name
+    </ResponseField>
+    
+    <ResponseField name="rulesJson" type="object">
+      Configuration rules (digits, drawSchedule, reventadoConfig)
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Whether the loteria is active
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of creation
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Pagination metadata
+  
+  <Expandable title="Meta Object">
+    <ResponseField name="total" type="integer">
+      Total number of loterias matching filters
+    </ResponseField>
+    
+    <ResponseField name="page" type="integer">
+      Current page number
+    </ResponseField>
+    
+    <ResponseField name="pageSize" type="integer">
+      Items per page
+    </ResponseField>
+    
+    <ResponseField name="totalPages" type="integer">
+      Total number of pages
+    </ResponseField>
+    
+    <ResponseField name="hasNextPage" type="boolean">
+      Whether there are more pages
+    </ResponseField>
+    
+    <ResponseField name="hasPrevPage" type="boolean">
+      Whether there are previous pages
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl "https://api.example.com/api/v1/loterias?page=1&pageSize=20&isActive=true" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Lotto",
+      "rulesJson": {
+        "digits": 2,
+        "drawSchedule": {
+          "frequency": "diario",
+          "times": ["12:55", "18:55"]
+        },
+        "reventadoConfig": {
+          "enabled": true
+        },
+        "autoCreateSorteos": true
+      },
+      "isActive": true,
+      "createdAt": "2025-03-03T10:00:00-06:00",
+      "updatedAt": "2025-03-03T10:00:00-06:00"
+    },
+    {
+      "id": "660e8400-e29b-41d4-a716-446655440001",
+      "name": "Tica",
+      "rulesJson": {
+        "digits": 2,
+        "drawSchedule": {
+          "frequency": "diario",
+          "times": ["13:00", "19:00"]
+        },
+        "reventadoConfig": {
+          "enabled": true
+        },
+        "autoCreateSorteos": true
+      },
+      "isActive": true,
+      "createdAt": "2025-03-03T10:00:00-06:00",
+      "updatedAt": "2025-03-03T10:00:00-06:00"
+    }
+  ],
+  "meta": {
+    "total": 5,
+    "page": 1,
+    "pageSize": 20,
+    "totalPages": 1,
+    "hasNextPage": false,
+    "hasPrevPage": false
+  }
+}
+```
+
+### Example Request (Search)
+
+```bash
+curl "https://api.example.com/api/v1/loterias?search=lotto" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+## Filtering Options
+
+<Tabs>
+  <Tab title="All Loterias">
+    ```bash
+    curl "https://api.example.com/api/v1/loterias"
+    ```
+  </Tab>
+  
+  <Tab title="Active Only">
+    ```bash
+    curl "https://api.example.com/api/v1/loterias?isActive=true"
+    ```
+  </Tab>
+  
+  <Tab title="Inactive Only">
+    ```bash
+    curl "https://api.example.com/api/v1/loterias?isActive=false"
+    ```
+  </Tab>
+  
+  <Tab title="Search by Name">
+    ```bash
+    curl "https://api.example.com/api/v1/loterias?search=monazo"
+    ```
+  </Tab>
+</Tabs>
+
+## Understanding rulesJson
+
+The `rulesJson` field contains loteria configuration:
+
+<AccordionGroup>
+  <Accordion title="digits" icon="hashtag">
+    Number of digits for winning numbers.
+    
+    - `2`: Times/Tiempos (00-99)
+    - `3`: Monazos (000-999)
+  </Accordion>
+  
+  <Accordion title="drawSchedule" icon="calendar">
+    Defines when sorteos are created automatically.
+    
+    ```json
+    {
+      "frequency": "diario",
+      "times": ["12:55", "18:55"],
+      "daysOfWeek": [1, 3, 5]
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="reventadoConfig" icon="burst">
+    REVENTADO (extra multiplier) settings.
+    
+    ```json
+    {
+      "enabled": true
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="autoCreateSorteos" icon="robot">
+    Whether sorteos are auto-generated.
+    
+    - `true`: Automatic via cron job
+    - `false`: Manual creation only
+  </Accordion>
+</AccordionGroup>
+
+## Use Cases
+
+<CodeGroup>
+```bash Get All Active Loterias
+# Used by vendedor UI to show available lotteries
+curl "https://api.example.com/api/v1/loterias?isActive=true"
+```
+
+```bash Search for Specific Loteria
+# Admin searching for a loteria by name
+curl "https://api.example.com/api/v1/loterias?search=lotto"
+```
+
+```bash Paginated List
+# Admin viewing all loterias with pagination
+curl "https://api.example.com/api/v1/loterias?page=1&pageSize=10"
+```
+</CodeGroup>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Get Loteria" icon="file" href="/api/loterias/get">
+    Get a single loteria by ID
+  </Card>
+  <Card title="Create Loteria" icon="plus" href="/api/loterias/create">
+    Create a new loteria
+  </Card>
+  <Card title="Update Loteria" icon="pen" href="/api/loterias/update">
+    Update loteria configuration
+  </Card>
+  <Card title="List Sorteos" icon="calendar" href="/api/sorteos/list">
+    Get sorteos for a loteria
+  </Card>
+</CardGroup>

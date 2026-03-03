@@ -1,0 +1,175 @@
+---
+title: 'List Users'
+api: 'GET /api/v1/users'
+description: 'Retrieve a paginated list of users. Accessible by ADMIN and VENTANA roles.'
+---
+
+## Overview
+
+Retrieves a paginated list of users with optional filtering. VENTANA users can only see VENDEDOR users within their own ventana.
+
+## Authorization
+
+<Info>**Required role:** ADMIN or VENTANA</Info>
+
+Permissions:
+- **ADMIN**: Can see all users
+- **VENTANA**: Can only see active VENDEDOR users in their ventana (automatically filtered)
+
+## Query Parameters
+
+<ParamField query="page" type="number" default="1">
+  Page number (must be positive integer)
+</ParamField>
+
+<ParamField query="pageSize" type="number" default="10">
+  Number of items per page (1-100)
+</ParamField>
+
+<ParamField query="role" type="string">
+  Filter by role: "ADMIN", "VENTANA", or "VENDEDOR"
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search term to filter users. Searches across name, username, email, phone, and code fields.
+</ParamField>
+
+<ParamField query="isActive" type="boolean">
+  Filter by active status. For VENTANA users, defaults to true if not specified.
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of user objects (password field excluded)
+  
+  <Expandable title="User object">
+    <ResponseField name="id" type="string">
+      UUID of the user
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      User's full name
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      Unique username
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Email address
+    </ResponseField>
+    
+    <ResponseField name="phone" type="string">
+      Phone number
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      User role
+    </ResponseField>
+    
+    <ResponseField name="ventanaId" type="string">
+      Associated ventana UUID
+    </ResponseField>
+    
+    <ResponseField name="code" type="string">
+      User code
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Active status
+    </ResponseField>
+    
+    <ResponseField name="settings" type="object">
+      User-specific settings
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Pagination metadata
+  
+  <Expandable title="Meta object">
+    <ResponseField name="page" type="number">
+      Current page number
+    </ResponseField>
+    
+    <ResponseField name="pageSize" type="number">
+      Items per page
+    </ResponseField>
+    
+    <ResponseField name="total" type="number">
+      Total number of items
+    </ResponseField>
+    
+    <ResponseField name="totalPages" type="number">
+      Total number of pages
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "success": true,
+  "data": [
+    {
+      "id": "770e8400-e29b-41d4-a716-446655440000",
+      "name": "Juan Pérez",
+      "username": "jperez",
+      "email": "jperez@example.com",
+      "phone": "8091234567",
+      "role": "VENDEDOR",
+      "ventanaId": "660e8400-e29b-41d4-a716-446655440000",
+      "code": "V001",
+      "isActive": true,
+      "settings": {
+        "theme": "dark",
+        "print": {
+          "width": 58
+        }
+      },
+      "platform": "android",
+      "appVersion": "2.0.7",
+      "createdAt": "2024-03-15T12:00:00Z",
+      "updatedAt": "2024-03-15T12:00:00Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "pageSize": 10,
+    "total": 1,
+    "totalPages": 1
+  }
+}
+```
+
+```json 403 - Forbidden
+{
+  "success": false,
+  "error": "Forbidden",
+  "message": "El usuario VENTANA no tiene una ventana asignada"
+}
+```
+</ResponseExample>
+
+## Notes
+
+- Password field is never included in response
+- VENTANA users automatically filtered to see only their vendedores (see src/api/v1/controllers/user.controller.ts:59-82)
+- For VENTANA role, isActive defaults to true if not specified (see src/api/v1/controllers/user.controller.ts:63-65)
+- ADMIN can see all users including inactive ones (see src/api/v1/controllers/user.controller.ts:87-94)
+- Search uses PostgreSQL trigram indexes for fuzzy matching
+- Soft-deleted users are excluded from results

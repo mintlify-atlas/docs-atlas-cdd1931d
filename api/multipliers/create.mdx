@@ -1,0 +1,359 @@
+---
+title: Create Multiplier
+description: Create base multipliers and REVENTADO multipliers for lotteries
+---
+
+## Overview
+
+Create multipliers that determine payout amounts for winning bets. Multipliers can be configured for standard NUMERO bets or special REVENTADO payouts.
+
+## Endpoint
+
+```http
+POST /api/v1/multipliers
+```
+
+**Authorization:** ADMIN only
+
+## Request Body
+
+<ParamField body="loteriaId" type="string" required>
+  UUID of the lottery this multiplier belongs to
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Display name for the multiplier (2-32 characters)
+  
+  **Examples:**
+  - "Base" (for default multiplier)
+  - "Base 80x"
+  - "REVENTADO Especial"
+  - "Promoción Fin de Semana"
+</ParamField>
+
+<ParamField body="valueX" type="number" required>
+  Multiplier value (must be positive)
+  
+  **Common values:**
+  - Standard: 70-95
+  - REVENTADO: 300-1000
+  
+  **Formula:** `Payout = Bet Amount × valueX`
+</ParamField>
+
+<ParamField body="kind" type="string" default="NUMERO">
+  Multiplier type:
+  - `NUMERO`: Standard bet multiplier
+  - `REVENTADO`: Extra multiplier for matching REVENTADO bets
+</ParamField>
+
+<ParamField body="appliesToDate" type="string">
+  ISO 8601 date for date-specific multipliers (null = applies always)
+  
+  **Use case:** Special multipliers for specific dates
+</ParamField>
+
+<ParamField body="appliesToSorteoId" type="string">
+  UUID of specific sorteo (null = applies to all sorteos)
+  
+  **Use case:** REVENTADO multipliers for specific draws
+</ParamField>
+
+<ParamField body="isActive" type="boolean" default="true">
+  Whether the multiplier is active and can be used
+</ParamField>
+
+## Multiplier Types
+
+### Base Multiplier (NUMERO)
+
+Standard multiplier used for all NUMERO bets in the lottery.
+
+```json
+{
+  "loteriaId": "loteria-uuid",
+  "name": "Base",
+  "valueX": 80,
+  "kind": "NUMERO",
+  "isActive": true
+}
+```
+
+<Info>
+  **Resolution priority:** Base multipliers are resolved using a 5-level hierarchy:
+  1. User multiplier override
+  2. Banca loteria setting
+  3. Loteria multiplier with `name="Base"`
+  4. Loteria rulesJson.baseMultiplierX
+  5. System default (env variable)
+</Info>
+
+### REVENTADO Multiplier
+
+Extra multiplier for winning REVENTADO bets (matching number + color).
+
+```json
+{
+  "loteriaId": "loteria-uuid",
+  "name": "REVENTADO Alto",
+  "valueX": 500,
+  "kind": "REVENTADO",
+  "isActive": true
+}
+```
+
+### Sorteo-Specific REVENTADO
+
+REVENTADO multiplier for a specific draw.
+
+```json
+{
+  "loteriaId": "loteria-uuid",
+  "name": "REVENTADO Especial - Sorteo 12:55",
+  "valueX": 600,
+  "kind": "REVENTADO",
+  "appliesToSorteoId": "sorteo-uuid",
+  "isActive": true
+}
+```
+
+### Date-Specific Multiplier
+
+Special multiplier for a specific date.
+
+```json
+{
+  "loteriaId": "loteria-uuid",
+  "name": "Promoción Navidad",
+  "valueX": 85,
+  "kind": "NUMERO",
+  "appliesToDate": "2025-12-25T00:00:00.000Z",
+  "isActive": true
+}
+```
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Created multiplier
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Multiplier UUID
+    </ResponseField>
+    
+    <ResponseField name="loteriaId" type="string">
+      Lottery UUID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Multiplier name
+    </ResponseField>
+    
+    <ResponseField name="valueX" type="number">
+      Multiplier value
+    </ResponseField>
+    
+    <ResponseField name="kind" type="string">
+      Multiplier type: `NUMERO` or `REVENTADO`
+    </ResponseField>
+    
+    <ResponseField name="appliesToDate" type="string">
+      ISO 8601 date filter (null if applies always)
+    </ResponseField>
+    
+    <ResponseField name="appliesToSorteoId" type="string">
+      Sorteo UUID (null if applies to all)
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Whether multiplier is active
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      Creation timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      Last update timestamp
+    </ResponseField>
+    
+    <ResponseField name="createdBy" type="object">
+      User who created the multiplier
+      - `id` (string): User UUID
+      - `name` (string): User name
+      - `username` (string): Username
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash Create Base Multiplier
+curl -X POST "https://api.example.com/api/v1/multipliers" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "loteriaId": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Base",
+    "valueX": 80,
+    "kind": "NUMERO",
+    "isActive": true
+  }'
+```
+
+```bash Create REVENTADO Multiplier
+curl -X POST "https://api.example.com/api/v1/multipliers" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "loteriaId": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "REVENTADO Alto",
+    "valueX": 500,
+    "kind": "REVENTADO",
+    "isActive": true
+  }'
+```
+
+```bash Create Sorteo-Specific REVENTADO
+curl -X POST "https://api.example.com/api/v1/multipliers" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "loteriaId": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "REVENTADO Especial - 12:55",
+    "valueX": 600,
+    "kind": "REVENTADO",
+    "appliesToSorteoId": "sorteo-uuid",
+    "isActive": true
+  }'
+```
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "multiplier-uuid",
+    "loteriaId": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Base",
+    "valueX": 80,
+    "kind": "NUMERO",
+    "appliesToDate": null,
+    "appliesToSorteoId": null,
+    "isActive": true,
+    "createdAt": "2025-03-15T10:00:00.000Z",
+    "updatedAt": "2025-03-15T10:00:00.000Z",
+    "createdBy": {
+      "id": "admin-uuid",
+      "name": "Admin User",
+      "username": "admin"
+    }
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always create a Base multiplier for each lottery">
+    Every lottery should have at least one multiplier with `name="Base"` and `kind="NUMERO"` to serve as the default payout multiplier.
+    
+    This ensures consistent behavior and avoids falling back to environment defaults.
+  </Accordion>
+  
+  <Accordion title="Use clear naming conventions">
+    Good names help identify multipliers quickly:
+    - **Base multipliers:** "Base", "Base 80x", "Estándar"
+    - **REVENTADO:** "REVENTADO Alto", "REVENTADO 500x", "REVENTADO Especial"
+    - **Promotional:** "Promoción Fin de Semana", "Navidad 2025"
+  </Accordion>
+  
+  <Accordion title="Set appliesToSorteoId for REVENTADO">
+    For special draws, create REVENTADO multipliers with `appliesToSorteoId` to ensure they only apply to specific sorteos.
+    
+    This prevents accidental application to the wrong draw.
+  </Accordion>
+  
+  <Accordion title="Monitor payout exposure">
+    Higher multipliers increase payout risk. Before creating high-value multipliers:
+    1. Review current exposure for the lottery
+    2. Set appropriate restriction rules
+    3. Monitor sales patterns
+  </Accordion>
+</AccordionGroup>
+
+## Snapshot Immutability
+
+<Warning>
+  **Multipliers are frozen at ticket creation**
+  
+  When a ticket is created, the `finalMultiplierX` value is captured and stored in each jugada. Updating or deleting a multiplier does **not** affect existing tickets.
+  
+  Only new tickets created after the change will use the updated multiplier.
+</Warning>
+
+## Error Responses
+
+<ResponseExample>
+```json 400 Bad Request - Validation Error
+{
+  "success": false,
+  "error": "Validation failed",
+  "issues": [
+    {
+      "path": ["valueX"],
+      "message": "valueX must be positive"
+    }
+  ]
+}
+```
+
+```json 400 Bad Request - Invalid Lottery
+{
+  "success": false,
+  "error": "Loteria not found",
+  "code": "LOTERIA_NOT_FOUND"
+}
+```
+
+```json 400 Bad Request - Invalid Sorteo
+{
+  "success": false,
+  "error": "Sorteo not found or does not belong to this loteria",
+  "code": "INVALID_SORTEO"
+}
+```
+</ResponseExample>
+
+## Related Endpoints
+
+<CardGroup cols={3}>
+  <Card title="List Multipliers" icon="list" href="/api/multipliers/list">
+    View all multipliers
+  </Card>
+  <Card title="Update Multiplier" icon="pen" href="/api/multipliers/update">
+    Modify existing multiplier
+  </Card>
+  <Card title="Multiplier Overrides" icon="user-gear" href="/api/multipliers/overrides">
+    Create user-specific overrides
+  </Card>
+</CardGroup>
+
+## Implementation Details
+
+From `src/api/v1/controllers/multiplier.controller.ts:6-9`:
+
+```typescript
+async create(req: AuthenticatedRequest, res: Response) {
+  const r = await MultiplierService.create(req.user!.id, req.body);
+  return res.status(201).json({ success: true, data: r });
+}
+```

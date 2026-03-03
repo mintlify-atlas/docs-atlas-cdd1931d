@@ -1,0 +1,434 @@
+---
+title: Commission Analytics
+description: View commission metrics, reports, and export data across vendedores, ventanas, and bancas
+---
+
+## Overview
+
+Commission analytics endpoints provide detailed insights into earned commissions with multi-dimensional filtering, period-based aggregation, and export capabilities.
+
+## Endpoints
+
+### List Commissions by Period
+
+```http
+GET /api/v1/commissions
+```
+
+Retrieve commission totals aggregated by time period with dimension breakdowns.
+
+**Authorization:** VENDEDOR, VENTANA, ADMIN
+
+### Commission Detail by Lottery
+
+```http
+GET /api/v1/commissions/detail
+```
+
+Get detailed commission breakdown by lottery and multiplier for a specific date.
+
+**Authorization:** VENDEDOR, VENTANA, ADMIN
+
+### Commission Tickets
+
+```http
+GET /api/v1/commissions/tickets
+```
+
+View individual tickets that contributed to commissions with pagination.
+
+**Authorization:** VENDEDOR, VENTANA, ADMIN
+
+### Export Commissions
+
+```http
+GET /api/v1/commissions/export
+```
+
+Export commission data in CSV, Excel, or PDF format.
+
+**Authorization:** VENDEDOR, VENTANA, ADMIN
+**Rate Limit:** 10 requests per minute
+
+## Query Parameters (List)
+
+<ParamField query="date" type="string" default="today">
+  Date range preset: `today`, `yesterday`, `week`, `month`, or `range`
+</ParamField>
+
+<ParamField query="fromDate" type="string">
+  Start date (ISO 8601 or YYYY-MM-DD) - required if `date=range`
+</ParamField>
+
+<ParamField query="toDate" type="string">
+  End date (ISO 8601 or YYYY-MM-DD) - required if `date=range`
+</ParamField>
+
+<ParamField query="scope" type="string" required>
+  Data scope:
+  - `mine`: Own commissions (required for VENDEDOR and VENTANA)
+  - `all`: System-wide (ADMIN only)
+</ParamField>
+
+<ParamField query="dimension" type="string" required>
+  Aggregation dimension:
+  - `vendedor`: By individual vendedor (VENDEDOR must use this)
+  - `ventana`: By ventana
+  - `banca`: By banca (ADMIN only)
+</ParamField>
+
+<ParamField query="ventanaId" type="string">
+  Filter by specific ventana UUID (ADMIN only)
+</ParamField>
+
+<ParamField query="vendedorId" type="string">
+  Filter by specific vendedor UUID (ADMIN and VENTANA)
+</ParamField>
+
+<ParamField query="bancaId" type="string">
+  Filter by specific banca UUID (ADMIN only)
+</ParamField>
+
+## Query Parameters (Detail)
+
+<ParamField query="date" type="string" required>
+  Specific date (YYYY-MM-DD format)
+</ParamField>
+
+<ParamField query="scope" type="string" required>
+  Same as List endpoint
+</ParamField>
+
+<ParamField query="dimension" type="string" required>
+  Same as List endpoint
+</ParamField>
+
+<ParamField query="ventanaId" type="string">
+  Filter by ventana (ADMIN only)
+</ParamField>
+
+<ParamField query="vendedorId" type="string">
+  Filter by vendedor (ADMIN and VENTANA)
+</ParamField>
+
+<ParamField query="bancaId" type="string">
+  Filter by banca (ADMIN only)
+</ParamField>
+
+## Query Parameters (Tickets)
+
+<ParamField query="date" type="string" required>
+  Specific date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField query="loteriaId" type="string" required>
+  Lottery UUID
+</ParamField>
+
+<ParamField query="multiplierId" type="string" required>
+  Multiplier UUID
+</ParamField>
+
+<ParamField query="scope" type="string" required>
+  Same as List endpoint
+</ParamField>
+
+<ParamField query="dimension" type="string" required>
+  Same as List endpoint
+</ParamField>
+
+<ParamField query="page" type="number" default="1">
+  Page number for pagination
+</ParamField>
+
+<ParamField query="pageSize" type="number" default="20">
+  Items per page (max 100)
+</ParamField>
+
+## Query Parameters (Export)
+
+<ParamField query="format" type="string" required>
+  Export format: `csv`, `excel`, or `pdf`
+</ParamField>
+
+<ParamField query="date" type="string" default="today">
+  Same as List endpoint
+</ParamField>
+
+<ParamField query="fromDate" type="string">
+  Same as List endpoint
+</ParamField>
+
+<ParamField query="toDate" type="string">
+  Same as List endpoint
+</ParamField>
+
+<ParamField query="scope" type="string" required>
+  Same as List endpoint
+</ParamField>
+
+<ParamField query="dimension" type="string" required>
+  Same as List endpoint
+</ParamField>
+
+<ParamField query="includeBreakdown" type="boolean" default="true">
+  Include lottery/multiplier breakdown in export
+</ParamField>
+
+<ParamField query="includeWarnings" type="boolean" default="true">
+  Include policy resolution warnings
+</ParamField>
+
+## Response (List)
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of commission summaries by period
+  
+  <Expandable title="Commission summary">
+    <ResponseField name="entityId" type="string">
+      Entity UUID (vendedor, ventana, or banca ID)
+    </ResponseField>
+    
+    <ResponseField name="entityName" type="string">
+      Entity display name
+    </ResponseField>
+    
+    <ResponseField name="totalSales" type="number">
+      Total bet amounts
+    </ResponseField>
+    
+    <ResponseField name="commissionTotal" type="number">
+      Total commission earned
+    </ResponseField>
+    
+    <ResponseField name="commissionPercent" type="number">
+      Average commission percentage
+    </ResponseField>
+    
+    <ResponseField name="ticketCount" type="number">
+      Number of tickets
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Metadata about the response
+  
+  <Expandable title="properties">
+    <ResponseField name="range" type="object">
+      Date range applied
+      - `fromAt` (string): Start timestamp (ISO 8601)
+      - `toAt` (string): End timestamp (ISO 8601)
+      - `tz` (string): Timezone used
+    </ResponseField>
+    
+    <ResponseField name="effectiveFilters" type="object">
+      Filters applied after RBAC resolution
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Response (Detail)
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of commission details by lottery and multiplier
+  
+  <Expandable title="Detail entry">
+    <ResponseField name="loteriaId" type="string">
+      Lottery UUID
+    </ResponseField>
+    
+    <ResponseField name="loteriaName" type="string">
+      Lottery name
+    </ResponseField>
+    
+    <ResponseField name="multiplierId" type="string">
+      Multiplier UUID
+    </ResponseField>
+    
+    <ResponseField name="multiplierName" type="string">
+      Multiplier name
+    </ResponseField>
+    
+    <ResponseField name="multiplierValue" type="number">
+      Multiplier value (e.g., 80)
+    </ResponseField>
+    
+    <ResponseField name="totalSales" type="number">
+      Total bet amount for this lottery/multiplier
+    </ResponseField>
+    
+    <ResponseField name="commissionTotal" type="number">
+      Commission earned
+    </ResponseField>
+    
+    <ResponseField name="ticketCount" type="number">
+      Number of tickets
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Response (Tickets)
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of tickets with commission details
+  
+  <Expandable title="Ticket entry">
+    <ResponseField name="ticketId" type="string">
+      Ticket UUID
+    </ResponseField>
+    
+    <ResponseField name="ticketNumber" type="string">
+      Ticket display number
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      Ticket creation timestamp
+    </ResponseField>
+    
+    <ResponseField name="totalAmount" type="number">
+      Total bet amount
+    </ResponseField>
+    
+    <ResponseField name="commissionTotal" type="number">
+      Commission earned from this ticket
+    </ResponseField>
+    
+    <ResponseField name="vendedorName" type="string">
+      Vendedor who created the ticket
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Pagination metadata
+  
+  <Expandable title="properties">
+    <ResponseField name="page" type="number">
+      Current page number
+    </ResponseField>
+    
+    <ResponseField name="pageSize" type="number">
+      Items per page
+    </ResponseField>
+    
+    <ResponseField name="total" type="number">
+      Total number of tickets
+    </ResponseField>
+    
+    <ResponseField name="pages" type="number">
+      Total number of pages
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash List Today's Commissions (Vendedor)
+curl -X GET "https://api.example.com/api/v1/commissions?date=today&scope=mine&dimension=vendedor" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash List Week Commissions by Ventana (Admin)
+curl -X GET "https://api.example.com/api/v1/commissions?date=week&scope=all&dimension=ventana" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash Commission Detail for Specific Date
+curl -X GET "https://api.example.com/api/v1/commissions/detail?date=2025-03-15&scope=mine&dimension=vendedor" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash Commission Tickets
+curl -X GET "https://api.example.com/api/v1/commissions/tickets?date=2025-03-15&loteriaId=abc&multiplierId=xyz&scope=mine&dimension=vendedor&page=1&pageSize=20" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash Export to Excel
+curl -X GET "https://api.example.com/api/v1/commissions/export?format=excel&date=month&scope=mine&dimension=vendedor" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  --output commissions.xlsx
+```
+</CodeGroup>
+
+## RBAC Enforcement
+
+<Note>
+  **Role-based access control is automatically enforced:**
+  
+  - **VENDEDOR:** Can only view their own commissions (`scope=mine`, `dimension=vendedor`)
+  - **VENTANA:** Can view their own and their vendedores' commissions (`scope=mine`)
+  - **ADMIN:** Can view all data with any dimension
+</Note>
+
+The system automatically applies filters based on the authenticated user's role and context:
+
+```typescript
+if (req.user.role === Role.VENDEDOR) {
+  // Force scope=mine and dimension=vendedor
+  filters.vendedorId = req.user.id;
+} else if (req.user.role === Role.VENTANA) {
+  // Force scope=mine, allow any dimension
+  filters.ventanaId = req.user.ventanaId;
+}
+```
+
+## Implementation Details
+
+From `src/api/v1/controllers/commissions.controller.ts:19-140`:
+
+```typescript
+async list(req: AuthenticatedRequest, res: Response) {
+  const { date = "today", fromDate, toDate, scope, dimension, ...rest } = req.query;
+  
+  // Apply RBAC filters
+  const context: AuthContext = {
+    userId: req.user.id,
+    role: req.user.role,
+    ventanaId: req.user.ventanaId,
+    bancaId: req.bancaContext?.bancaId || null,
+  };
+  const effectiveFilters = await applyRbacFilters(context, rest);
+  
+  // Resolve date range
+  const dateRange = resolveDateRange(date, fromDate, toDate);
+  
+  // Fetch commission data
+  const result = await CommissionsService.list(
+    date, fromDate, toDate, filters, ventanaUserId
+  );
+  
+  return success(res, result, {
+    range: {
+      fromAt: dateRange.fromAt.toISOString(),
+      toAt: dateRange.toAt.toISOString(),
+      tz: dateRange.tz,
+    },
+    effectiveFilters,
+  });
+}
+```
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Get Commission Policy" icon="eye" href="/api/commissions/get-policy">
+    View commission policy configuration
+  </Card>
+  <Card title="Set Commission Policy" icon="pen" href="/api/commissions/set-policy">
+    Update commission policy
+  </Card>
+</CardGroup>

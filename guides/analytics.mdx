@@ -1,0 +1,736 @@
+---
+title: "Analytics and Reporting"
+description: "Using dashboard and reporting APIs for sales analytics, exposure analysis, and operational metrics"
+---
+
+## Overview
+
+The analytics system provides comprehensive insights into lottery operations through multiple specialized endpoints. All endpoints support RBAC filtering, date ranges, and dimensional breakdowns.
+
+## Dashboard Overview
+
+The main dashboard endpoint aggregates all key metrics in a single response.
+
+```bash
+GET /api/v1/admin/dashboard?date=today&dimension=ventana
+```
+
+From `src/api/v1/controllers/dashboard.controller.ts:44-74`:
+
+```typescript
+async getMainDashboard(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) throw new AppError("Unauthorized", 401);
+  
+  // Validate access: only ADMIN and VENTANA
+  if (req.user.role === Role.VENDEDOR) {
+    throw new AppError("No autorizado para ver dashboard", 403);
+  }
+  
+  const query = req.query as any;
+  const date = query.date || 'today';
+  const dateRange = resolveDateRange(date, query.fromDate, query.toDate);
+  
+  const { ventanaId, bancaId } = await applyDashboardRbac(req, query);
+  
+  const result = await DashboardService.getFullDashboard({
+    fromDate: dateRange.fromAt,
+    toDate: dateRange.toAt,
+    ventanaId,
+    bancaId,
+    loteriaId: query.loteriaId,
+    betType: query.betType,
+    interval: query.interval,
+    scope: query.scope || 'all',
+    dimension: query.dimension,
+  }, req.user!.role);
+  
+  return success(res, result);
+}
+```
+
+### Query Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|--------|
+| `date` | string | `today` \| `yesterday` \| `week` \| `month` \| `range` | `today` |
+| `fromDate` | string | Start date (YYYY-MM-DD) for `date=range` | - |
+| `toDate` | string | End date (YYYY-MM-DD) for `date=range` | - |
+| `dimension` | string | `ventana` \| `loteria` \| `vendedor` | - |
+| `ventanaId` | string | Filter by ventana (ADMIN only) | - |
+| `loteriaId` | string | Filter by lottery | - |
+| `betType` | string | `NUMERO` \| `REVENTADO` | - |
+| `interval` | string | `day` \| `hour` | `day` |
+| `scope` | string | `all` \| `mine` | `all` |
+
+<Warning>
+  **Date range validation:**
+  - When using `fromDate` and `toDate`, you **must** set `date=range`
+  - `hour` interval only allowed for periods ≤ 7 days
+  - All dates use Costa Rica timezone (UTC-6)
+</Warning>
+
+### Response Structure
+
+```json
+{
+  "summary": {
+    "totalSales": 250000,
+    "totalTickets": 450,
+    "avgTicketAmount": 556,
+    "totalPayout": 180000,
+    "totalWinners": 125,
+    "netRevenue": 70000,
+    "totalCommissions": 12500,
+    "netAfterCommission": 57500
+  },
+  "cxc": {
+    "totalAmount": 45000,
+    "overdueAmount": 12000,
+    "oldestDays": 15
+  },
+  "payments": {
+    "totalPaid": 125000,
+    "remainingAmount": 55000,
+    "paidCount": 85,
+    "unpaidCount": 40
+  },
+  "breakdown": {
+    "byVentana": [...],
+    "byLoteria": [...],
+    "byVendedor": [...]
+  },
+  "meta": {
+    "fromDate": "2025-01-20T06:00:00.000Z",
+    "toDate": "2025-01-20T05:59:59.999Z",
+    "timezone": "America/Costa_Rica",
+    "queryExecutionTime": 145,
+    "totalQueries": 8
+  }
+}
+```
+
+## Ganancia (Profit) Analysis
+
+Detailed profit breakdown with commission deduction.
+
+```bash
+GET /api/v1/admin/dashboard/ganancia?date=today&dimension=ventana
+```
+
+From `src/api/v1/controllers/dashboard.controller.ts:81-114`:
+
+```typescript
+async getGanancia(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) throw new AppError("Unauthorized", 401);
+  
+  if (req.user.role === Role.VENDEDOR) {
+    throw new AppError("No autorizado", 403);
+  }
+  
+  const query = req.query as any;
+  const date = query.date || 'today';
+  const dateRange = resolveDateRange(date, query.fromDate, query.toDate);
+  
+  const { ventanaId, bancaId } = await applyDashboardRbac(req, query);
+  
+  const result = await DashboardService.calculateGanancia({
+    fromDate: dateRange.fromAt,
+    toDate: dateRange.toAt,
+    ventanaId,
+    bancaId,
+    dimension: query.dimension,
+  }, req.user!.role);
+  
+  return success(res, {
+    data: result,
+    meta: {
+      range: {
+        fromAt: dateRange.fromAt.toISOString(),
+        toAt: dateRange.toAt.toISOString(),
+      },
+      generatedAt: new Date().toISOString(),
+    },
+  });
+}
+```
+
+### Response Structure
+
+```json
+{
+  "data": {
+    "totalSales": 250000,
+    "totalPayouts": 180000,
+    "totalCommissions": 12500,
+    "commissionUserTotal": 8000,
+    "commissionVentanaTotal": 4500,
+    "totalNet": 57500,
+    "margin": 23.0,
+    "items": [
+      {
+        "ventanaId": "uuid-ventana-1",
+        "ventanaName": "Ventana Centro",
+        "sales": 150000,
+        "payout": 100000,
+        "commissions": 7500,
+        "netProfit": 42500,
+        "margin": 28.3
+      }
+    ]
+  },
+  "meta": {...}
+}
+```
+
+### Month-to-Date Ganancia
+
+Accumulated profit from start of month to today.
+
+```bash
+GET /api/v1/admin/dashboard/ganancia/month-to-date?dimension=ventana
+```
+
+From `src/api/v1/controllers/dashboard.controller.ts:121-180`:
+
+```typescript
+async getGananciaMonthToDate(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) throw new AppError("Unauthorized", 401);
+  
+  if (req.user.role === Role.VENDEDOR) {
+    throw new AppError("No autorizado", 403);
+  }
+  
+  const query = req.query as any;
+  
+  // Validate dimension is 'ventana'
+  if (query.dimension !== 'ventana') {
+    throw new AppError("El parámetro 'dimension' debe ser 'ventana'", 400);
+  }
+  
+  // Auto-calculate month range in CR timezone
+  const monthRange = resolveDateRange('month');
+  const todayRange = resolveDateRange('today');
+  
+  const { ventanaId, bancaId } = await applyDashboardRbac(req, query);
+  
+  const result = await DashboardService.calculateGanancia({
+    fromDate: monthRange.fromAt,
+    toDate: todayRange.toAt,
+    ventanaId,
+    bancaId,
+    dimension: 'ventana',
+  }, req.user!.role);
+  
+  // ... format response with month name in Spanish
+}
+```
+
+<Note>
+  **Month-to-date calculation:**
+  - Start: First day of current month at 00:00 CR time
+  - End: Current day at 23:59:59.999 CR time
+  - Automatically resolves month name in Spanish
+</Note>
+
+## CXC (Accounts Receivable)
+
+Track amounts owed by customers.
+
+```bash
+GET /api/v1/admin/dashboard/cxc?date=today&dimension=ventana
+```
+
+From `src/api/v1/controllers/dashboard.controller.ts:186-218`:
+
+```typescript
+async getCxC(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) throw new AppError("Unauthorized", 401);
+  
+  if (req.user.role === Role.VENDEDOR) {
+    throw new AppError("No autorizado", 403);
+  }
+  
+  const query = req.query as any;
+  const date = query.date || 'today';
+  const dateRange = resolveDateRange(date, query.fromDate, query.toDate);
+  
+  const { ventanaId, bancaId } = await applyDashboardRbac(req, query);
+  
+  const result = await DashboardService.calculateCxC({
+    fromDate: dateRange.fromAt,
+    toDate: dateRange.toAt,
+    ventanaId,
+    bancaId,
+    cxcDimension: query.dimension === 'vendedor' ? 'vendedor' : 'ventana',
+  }, req.user!.role);
+  
+  return success(res, {
+    data: result,
+    meta: {...}
+  });
+}
+```
+
+### Dimensions
+
+- **`dimension=ventana`**: CXC grouped by ventana
+- **`dimension=vendedor`**: CXC grouped by vendedor
+
+### Response
+
+```json
+{
+  "data": {
+    "items": [
+      {
+        "ventanaId": "uuid-ventana",
+        "ventanaName": "Centro",
+        "totalOwed": 45000,
+        "overdueAmount": 12000,
+        "oldestInvoiceDays": 15,
+        "invoiceCount": 8
+      }
+    ],
+    "global": {
+      "totalOwed": 45000,
+      "overdueAmount": 12000
+    }
+  }
+}
+```
+
+## CXP (Accounts Payable)
+
+Track amounts owed to vendedores/ventanas.
+
+```bash
+GET /api/v1/admin/dashboard/cxp?date=today&dimension=ventana
+```
+
+From `src/api/v1/controllers/dashboard.controller.ts:224-257`:
+
+```typescript
+async getCxP(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) throw new AppError("Unauthorized", 401);
+  
+  if (req.user.role === Role.VENDEDOR) {
+    throw new AppError("No autorizado", 403);
+  }
+  
+  const query = req.query as any;
+  const date = query.date || 'today';
+  const dateRange = resolveDateRange(date, query.fromDate, query.toDate);
+  
+  const { ventanaId, bancaId } = await applyDashboardRbac(req, query);
+  
+  const result = await DashboardService.calculateCxP({
+    fromDate: dateRange.fromAt,
+    toDate: dateRange.toAt,
+    ventanaId,
+    bancaId,
+    cxcDimension: query.dimension === 'vendedor' ? 'vendedor' : 'ventana',
+  }, req.user!.role);
+  
+  return success(res, {...});
+}
+```
+
+## Time Series
+
+Sales and profit trends over time.
+
+```bash
+GET /api/v1/admin/dashboard/timeseries?date=week&interval=day&compare=true
+```
+
+From `src/api/v1/controllers/dashboard.controller.ts:263-303`:
+
+```typescript
+async getTimeSeries(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) throw new AppError("Unauthorized", 401);
+  
+  if (req.user.role === Role.VENDEDOR) {
+    throw new AppError("No autorizado", 403);
+  }
+  
+  const query = req.query as any;
+  const date = query.date || 'today';
+  const dateRange = resolveDateRange(date, query.fromDate, query.toDate);
+  
+  const { ventanaId, bancaId } = await applyDashboardRbac(req, query);
+  
+  const interval = query.interval || query.granularity || 'day';
+  const compare = query.compare === true || query.compare === 'true';
+  
+  const result = await DashboardService.getTimeSeries({
+    fromDate: dateRange.fromAt,
+    toDate: dateRange.toAt,
+    ventanaId,
+    bancaId,
+    loteriaId: query.loteriaId,
+    betType: query.betType,
+    interval,
+    compare,
+  });
+  
+  return success(res, {...});
+}
+```
+
+### Intervals
+
+- **`interval=day`**: Daily aggregation (any period)
+- **`interval=hour`**: Hourly aggregation (max 7 days)
+
+### Compare Mode
+
+When `compare=true`, includes data from equivalent previous period.
+
+```json
+{
+  "current": [
+    {"date": "2025-01-20", "sales": 250000, "tickets": 450},
+    {"date": "2025-01-21", "sales": 280000, "tickets": 520}
+  ],
+  "previous": [
+    {"date": "2025-01-13", "sales": 220000, "tickets": 400},
+    {"date": "2025-01-14", "sales": 260000, "tickets": 480}
+  ]
+}
+```
+
+## Exposure Analysis
+
+Financial risk analysis by number, showing potential payout if specific numbers win.
+
+```bash
+GET /api/v1/admin/dashboard/exposure?date=today&top=20
+```
+
+From `src/api/v1/controllers/dashboard.controller.ts:309-344`:
+
+```typescript
+async getExposure(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) throw new AppError("Unauthorized", 401);
+  
+  if (req.user.role === Role.VENDEDOR) {
+    throw new AppError("No autorizado", 403);
+  }
+  
+  const query = req.query as any;
+  const date = query.date || 'today';
+  const dateRange = resolveDateRange(date, query.fromDate, query.toDate);
+  
+  const { ventanaId, bancaId } = await applyDashboardRbac(req, query);
+  
+  const result = await DashboardService.calculateExposure({
+    fromDate: dateRange.fromAt,
+    toDate: dateRange.toAt,
+    ventanaId,
+    bancaId,
+    loteriaId: query.loteriaId,
+    betType: query.betType,
+    top: query.top ? parseInt(query.top) : 10,
+  });
+  
+  return success(res, {...});
+}
+```
+
+### Response
+
+```json
+{
+  "data": {
+    "topExposures": [
+      {
+        "number": "25",
+        "totalBets": 45000,
+        "potentialPayout": 4275000,
+        "ticketCount": 125,
+        "avgMultiplier": 95
+      },
+      {
+        "number": "50",
+        "totalBets": 38000,
+        "potentialPayout": 3610000,
+        "ticketCount": 98,
+        "avgMultiplier": 95
+      }
+    ],
+    "summary": {
+      "totalExposure": 15000000,
+      "highestSingleNumber": 4275000,
+      "avgExposurePerNumber": 150000
+    }
+  }
+}
+```
+
+<Warning>
+  **High exposure indicators:**
+  - `potentialPayout` > 10x daily average sales
+  - Single number with > 20% of total exposure
+  - Consider creating restriction rules for high-exposure numbers
+</Warning>
+
+## Vendedor Rankings
+
+Performance ranking with pagination.
+
+```bash
+GET /api/v1/admin/dashboard/vendedores?date=today&orderBy=sales&order=desc&page=1&pageSize=20
+```
+
+From `src/api/v1/controllers/dashboard.controller.ts:350-390`:
+
+```typescript
+async getVendedores(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) throw new AppError("Unauthorized", 401);
+  
+  if (req.user.role === Role.VENDEDOR) {
+    throw new AppError("No autorizado", 403);
+  }
+  
+  const query = req.query as any;
+  const date = query.date || 'today';
+  const dateRange = resolveDateRange(date, query.fromDate, query.toDate);
+  
+  const { ventanaId, bancaId } = await applyDashboardRbac(req, query);
+  
+  const result = await DashboardService.getVendedores({
+    fromDate: dateRange.fromAt,
+    toDate: dateRange.toAt,
+    ventanaId,
+    bancaId,
+    loteriaId: query.loteriaId,
+    betType: query.betType,
+    top: query.top ? parseInt(query.top) : undefined,
+    orderBy: query.orderBy || 'sales',
+    order: query.order || 'desc',
+    page: query.page ? parseInt(query.page) : 1,
+    pageSize: query.pageSize ? parseInt(query.pageSize) : 20,
+  });
+  
+  return success(res, {
+    data: result.byVendedor,
+    pagination: result.pagination,
+    meta: {...}
+  });
+}
+```
+
+### Sorting Options
+
+- `orderBy=sales`: Sort by total sales
+- `orderBy=tickets`: Sort by ticket count
+- `orderBy=payout`: Sort by total payout
+- `orderBy=net`: Sort by net profit
+- `orderBy=commission`: Sort by commission earned
+
+## Dashboard Summary (Unified)
+
+Consolidated endpoint replacing multiple individual calls.
+
+```bash
+GET /api/v1/admin/dashboard/summary?date=today
+```
+
+From `src/api/v1/controllers/dashboard.controller.ts:547-567`:
+
+```typescript
+async getDashboardSummary(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) throw new AppError("Unauthorized", 401);
+  
+  if (req.user.role === Role.VENDEDOR) {
+    throw new AppError("No autorizado para ver dashboard", 403);
+  }
+  
+  const query = req.query as any;
+  const date = query.date || 'today';
+  const dateRange = resolveDateRange(date, query.fromDate, query.toDate);
+  const { ventanaId, bancaId } = await applyDashboardRbac(req, query);
+  
+  const result = await DashboardService.calculateDashboardSummary({
+    fromDate: dateRange.fromAt,
+    toDate:   dateRange.toAt,
+    ventanaId,
+    bancaId,
+  });
+  
+  return success(res, result);
+}
+```
+
+**Replaces:**
+- `/ganancia`
+- `/cxc?dimension=ventana`
+- `/cxp?dimension=ventana`
+- `/ganancia/month-to-date`
+- `/accumulated-balances?dimension=ventana`
+
+## Dashboard Entities (Vendedor Detail)
+
+```bash
+GET /api/v1/admin/dashboard/entities?date=today
+```
+
+From `src/api/v1/controllers/dashboard.controller.ts:575-595`:
+
+```typescript
+async getDashboardEntities(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) throw new AppError("Unauthorized", 401);
+  
+  if (req.user.role === Role.VENDEDOR) {
+    throw new AppError("No autorizado para ver dashboard", 403);
+  }
+  
+  const query = req.query as any;
+  const date = query.date || 'today';
+  const dateRange = resolveDateRange(date, query.fromDate, query.toDate);
+  const { ventanaId, bancaId } = await applyDashboardRbac(req, query);
+  
+  const result = await DashboardService.calculateDashboardEntities({
+    fromDate: dateRange.fromAt,
+    toDate:   dateRange.toAt,
+    ventanaId,
+    bancaId,
+  });
+  
+  return success(res, result);
+}
+```
+
+**Replaces:**
+- `/cxc?dimension=vendedor`
+- `/cxp?dimension=vendedor`
+- `/vendedores`
+- `/accumulated-balances?dimension=vendedor`
+
+## Export Dashboard
+
+Export dashboard data in CSV, XLSX, or PDF format.
+
+```bash
+GET /api/v1/admin/dashboard/export?date=today&format=xlsx
+```
+
+From `src/api/v1/controllers/dashboard.controller.ts:431-539`:
+
+```typescript
+async exportDashboard(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) throw new AppError("Unauthorized", 401);
+  
+  if (req.user.role === Role.VENDEDOR) {
+    throw new AppError("No autorizado", 403);
+  }
+  
+  const query = req.query as any;
+  const format = query.format || 'csv';
+  
+  if (!['csv', 'xlsx', 'pdf'].includes(format)) {
+    throw new AppError("Formato inválido. Use: csv, xlsx, pdf", 422);
+  }
+  
+  const date = query.fromDate && query.toDate ? 'range' : (query.date || 'today');
+  const dateRange = resolveDateRange(date, query.fromDate, query.toDate);
+  
+  const { ventanaId, bancaId } = await applyDashboardRbac(req, query);
+  
+  const dashboard = await DashboardService.getFullDashboard({...});
+  
+  const timestamp = new Date().toISOString().split('T')[0];
+  const filename = `dashboard-${timestamp}.${format}`;
+  
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  
+  if (format === 'csv') {
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    const csv = DashboardExportService.generateCSV(dashboard as any);
+    return res.send('\ufeff' + csv); // UTF-8 BOM for Excel
+  } else if (format === 'xlsx') {
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const workbook = await DashboardExportService.generateWorkbook(dashboard as any);
+    await workbook.xlsx.write(res);
+    return res.end();
+  } else if (format === 'pdf') {
+    // PDF generation logic
+  }
+}
+```
+
+### Export Formats
+
+- **`format=csv`**: UTF-8 CSV with BOM (Excel compatible)
+- **`format=xlsx`**: Excel workbook with multiple sheets
+- **`format=pdf`**: PDF report with charts
+
+## RBAC and Permissions
+
+### Role-Based Filtering
+
+From `src/api/v1/controllers/dashboard.controller.ts:20-37`:
+
+```typescript
+async function applyDashboardRbac(req: AuthenticatedRequest, query: any) {
+  let ventanaId = query.ventanaId;
+  let bancaId: string | undefined = undefined;
+  
+  if (req.user!.role === Role.VENTANA) {
+    // VENTANA only sees their own data
+    const validatedVentanaId = await validateVentanaUser(
+      req.user!.role, 
+      req.user!.ventanaId, 
+      req.user!.id
+    );
+    ventanaId = validatedVentanaId!;
+  } else if (req.user!.role === Role.ADMIN) {
+    // ADMIN: filter by active banca if available
+    if (req.bancaContext?.bancaId) {
+      bancaId = req.bancaContext.bancaId;
+    }
+  }
+  
+  return { ventanaId, bancaId };
+}
+```
+
+**Access levels:**
+- **VENDEDOR**: ❌ No dashboard access
+- **VENTANA**: ✅ Own ventana data only
+- **ADMIN**: ✅ All data, filtered by active banca context
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use unified endpoints for performance">
+    Prefer `/dashboard/summary` and `/dashboard/entities` over multiple individual calls to reduce latency.
+  </Accordion>
+
+  <Accordion title="Cache dashboard data client-side">
+    Dashboard queries are expensive. Cache results for 1-5 minutes and refresh on user action.
+  </Accordion>
+
+  <Accordion title="Use hour interval sparingly">
+    `interval=hour` is only allowed for periods ≤7 days and generates 168+ data points. Use for tactical views only.
+  </Accordion>
+
+  <Accordion title="Monitor exposure regularly">
+    Check `/dashboard/exposure` before each major sorteo. Create restriction rules for numbers with >10x average exposure.
+  </Accordion>
+
+  <Accordion title="Export for compliance">
+    Use `/export?format=xlsx` for auditable financial reports. Include date ranges in filename.
+  </Accordion>
+
+  <Accordion title="Compare periods for trends">
+    Use `compare=true` in timeseries to identify growth/decline patterns quickly.
+  </Accordion>
+</AccordionGroup>
+
+## Related Guides
+
+- [Ticket Creation](/guides/ticket-creation) - Source of sales data
+- [Sorteo Management](/guides/sorteo-management) - Understanding draw cycles
+- [Payments](/guides/payments) - Payment tracking in analytics
+- [Restriction Rules](/guides/restriction-rules) - Using exposure data to set limits

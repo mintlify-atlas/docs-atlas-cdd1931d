@@ -1,0 +1,142 @@
+---
+title: Sellers Ranking
+api: GET /api/v1/admin/dashboard/vendedores
+description: Get seller performance rankings and metrics
+---
+
+## Overview
+
+Returns seller performance data ranked by sales, tickets, or other metrics. Supports pagination and filtering.
+
+## Authentication
+
+Requires JWT authentication. **VENDEDOR** role is not authorized.
+
+## Query Parameters
+
+<ParamField query="date" type="enum" default="today">
+  Date range preset: `today`, `yesterday`, `week`, `month`, `year`, `range`
+</ParamField>
+
+<ParamField query="fromDate" type="string">
+  Start date in `YYYY-MM-DD` (required if `date=range`)
+</ParamField>
+
+<ParamField query="toDate" type="string">
+  End date in `YYYY-MM-DD` (required if `date=range`)
+</ParamField>
+
+<ParamField query="ventanaId" type="string">
+  Filter by ventana
+</ParamField>
+
+<ParamField query="loteriaId" type="string">
+  Filter by lottery
+</ParamField>
+
+<ParamField query="betType" type="string">
+  Filter by bet type
+</ParamField>
+
+<ParamField query="orderBy" type="enum" default="sales">
+  Sort by: `sales`, `payouts`, `tickets`, `netProfit`
+</ParamField>
+
+<ParamField query="order" type="enum" default="desc">
+  Sort order: `asc`, `desc`
+</ParamField>
+
+<ParamField query="top" type="number">
+  Limit results to top N sellers
+</ParamField>
+
+<ParamField query="page" type="number" default="1">
+  Page number for pagination
+</ParamField>
+
+<ParamField query="pageSize" type="number" default="20">
+  Items per page (max 100)
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="array">
+  Seller performance data
+  
+  <Expandable title="Seller item">
+    <ResponseField name="vendedorId" type="string">Seller user ID</ResponseField>
+    <ResponseField name="vendedorName" type="string">Seller name</ResponseField>
+    <ResponseField name="ventanaId" type="string">Associated window ID</ResponseField>
+    <ResponseField name="ventanaName" type="string">Window name</ResponseField>
+    <ResponseField name="sales" type="number">Total sales</ResponseField>
+    <ResponseField name="payouts" type="number">Total payouts</ResponseField>
+    <ResponseField name="tickets" type="number">Number of tickets</ResponseField>
+    <ResponseField name="netProfit" type="number">Net profit</ResponseField>
+    <ResponseField name="margin" type="number">Profit margin percentage</ResponseField>
+    <ResponseField name="rank" type="number">Rank position</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata
+  
+  <Expandable title="properties">
+    <ResponseField name="page" type="number">Current page</ResponseField>
+    <ResponseField name="pageSize" type="number">Items per page</ResponseField>
+    <ResponseField name="totalPages" type="number">Total pages</ResponseField>
+    <ResponseField name="totalItems" type="number">Total items</ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example Request
+
+```bash
+GET /api/v1/admin/dashboard/vendedores?date=month&orderBy=sales&order=desc&page=1&pageSize=20
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "vendedorId": "abc-123",
+      "vendedorName": "Juan Pérez",
+      "ventanaId": "ventana-001",
+      "ventanaName": "Ventana Centro",
+      "sales": 500000,
+      "payouts": 250000,
+      "tickets": 450,
+      "netProfit": 250000,
+      "margin": 50.0,
+      "rank": 1
+    },
+    {
+      "vendedorId": "def-456",
+      "vendedorName": "María López",
+      "ventanaId": "ventana-001",
+      "ventanaName": "Ventana Centro",
+      "sales": 450000,
+      "payouts": 220000,
+      "tickets": 380,
+      "netProfit": 230000,
+      "margin": 51.1,
+      "rank": 2
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "pageSize": 20,
+    "totalPages": 3,
+    "totalItems": 55
+  },
+  "meta": {
+    "range": {
+      "fromAt": "2024-03-01T06:00:00.000Z",
+      "toAt": "2024-04-01T05:59:59.999Z"
+    },
+    "generatedAt": "2024-03-15T12:00:00.000Z"
+  }
+}
+```

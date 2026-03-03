@@ -1,0 +1,181 @@
+---
+title: 'List Vendedores'
+api: 'GET /api/v1/vendedores'
+description: 'Retrieve a paginated list of vendedores (sellers). Accessible by all authenticated users.'
+---
+
+## Overview
+
+Retrieves a paginated list of vendedores (sellers) with optional filtering. VENTANA users can only see vendedores within their own ventana.
+
+## Authorization
+
+<Info>**Required:** Valid JWT token (all authenticated users)</Info>
+
+Permissions:
+- **ADMIN**: Can see all vendedores
+- **VENTANA**: Can only see vendedores in their ventana (automatically filtered)
+- **VENDEDOR**: Can see all vendedores
+
+## Query Parameters
+
+<ParamField query="page" type="number" default="1">
+  Page number (must be positive integer)
+</ParamField>
+
+<ParamField query="pageSize" type="number" default="20">
+  Number of items per page (1-100)
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search term to filter vendedores. Searches across name, username, email, phone, and code fields.
+</ParamField>
+
+<ParamField query="ventanaId" type="string">
+  Filter by ventana UUID (ADMIN only - ignored for VENTANA users who are auto-filtered)
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of vendedor user objects (password excluded)
+  
+  <Expandable title="Vendedor object">
+    <ResponseField name="id" type="string">
+      UUID of the vendedor
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Vendedor's full name
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      Unique username
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Email address
+    </ResponseField>
+    
+    <ResponseField name="phone" type="string">
+      Phone number
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      Always "VENDEDOR"
+    </ResponseField>
+    
+    <ResponseField name="ventanaId" type="string">
+      Associated ventana UUID
+    </ResponseField>
+    
+    <ResponseField name="code" type="string">
+      Vendedor code
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Active status
+    </ResponseField>
+    
+    <ResponseField name="settings" type="object">
+      Vendedor-specific settings
+    </ResponseField>
+    
+    <ResponseField name="platform" type="string">
+      User platform (web, android, ios)
+    </ResponseField>
+    
+    <ResponseField name="appVersion" type="string">
+      Application version
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Pagination metadata
+  
+  <Expandable title="Meta object">
+    <ResponseField name="page" type="number">
+      Current page number
+    </ResponseField>
+    
+    <ResponseField name="pageSize" type="number">
+      Items per page
+    </ResponseField>
+    
+    <ResponseField name="total" type="number">
+      Total number of items
+    </ResponseField>
+    
+    <ResponseField name="totalPages" type="number">
+      Total number of pages
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "success": true,
+  "data": [
+    {
+      "id": "770e8400-e29b-41d4-a716-446655440000",
+      "name": "Carlos Martínez",
+      "username": "cmartinez",
+      "email": "cmartinez@example.com",
+      "phone": "8091234567",
+      "role": "VENDEDOR",
+      "ventanaId": "660e8400-e29b-41d4-a716-446655440000",
+      "code": "CM001",
+      "isActive": true,
+      "settings": {
+        "theme": "dark",
+        "print": {
+          "width": 58,
+          "barcode": true
+        }
+      },
+      "platform": "android",
+      "appVersion": "2.0.7",
+      "createdAt": "2024-03-15T13:00:00Z",
+      "updatedAt": "2024-03-15T13:00:00Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "pageSize": 20,
+    "total": 1,
+    "totalPages": 1
+  }
+}
+```
+
+```json 401 - Unauthorized
+{
+  "success": false,
+  "error": "Unauthorized",
+  "message": "Authentication required"
+}
+```
+</ResponseExample>
+
+## Notes
+
+- Password field is never included in response
+- VENTANA users automatically filtered to see only vendedores in their ventana (see src/api/v1/controllers/vendedor.controller.ts:59-63)
+- Search uses PostgreSQL trigram indexes for fuzzy matching
+- Soft-deleted vendedores are excluded from results
+- Only returns users with VENDEDOR role
+- Implementation: src/api/v1/controllers/vendedor.controller.ts:53-66

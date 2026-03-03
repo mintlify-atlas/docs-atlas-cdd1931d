@@ -1,0 +1,288 @@
+---
+title: Get Restriction Rule
+description: Retrieve a single restriction rule by ID or get effective restrictions for a vendedor
+---
+
+## Get by ID
+
+Retrieve details of a specific restriction rule.
+
+### Endpoint
+
+```http
+GET /api/v1/restrictions/:id
+```
+
+**Authorization:** Authenticated users (ADMIN, VENTANA, VENDEDOR)
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the restriction rule
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Restriction rule details (see List endpoint for full schema)
+</ResponseField>
+
+### Example
+
+```bash
+curl -X GET "https://api.example.com/api/v1/restrictions/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+---
+
+## My Restrictions (Vendedor View)
+
+Get all effective restrictions for the authenticated vendedor, including inherited rules from ventana and banca.
+
+### Endpoint
+
+```http
+GET /api/v1/restrictions/me
+```
+
+**Authorization:** Authenticated users (ADMIN, VENTANA, VENDEDOR)
+
+<Info>
+  **Hierarchical resolution:** Returns both general (banca/ventana-level) and user-specific restrictions with proper priority sorting.
+</Info>
+
+### Query Parameters
+
+<ParamField query="vendedorId" type="string">
+  **Impersonation:** Specify vendedor UUID to view their restrictions
+  
+  - **ADMIN:** Can query any vendedor
+  - **VENTANA:** Can query vendedores in their ventana only
+  - **VENDEDOR:** Parameter is ignored, always returns own restrictions
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Effective restrictions organized by scope
+  
+  <Expandable title="properties">
+    <ResponseField name="general" type="array">
+      General restrictions (from banca/ventana level)
+      
+      Array of restriction rules with:
+      - All standard rule fields
+      - `priority` (number): 1 (banca) or 10 (ventana)
+    </ResponseField>
+    
+    <ResponseField name="vendorSpecific" type="array">
+      User-specific restrictions (highest priority)
+      
+      Array of restriction rules with:
+      - All standard rule fields
+      - `priority` (number): 100 (user level)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+```bash Get Own Restrictions (Vendedor)
+curl -X GET "https://api.example.com/api/v1/restrictions/me" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash Impersonate Vendedor (Admin)
+curl -X GET "https://api.example.com/api/v1/restrictions/me?vendedorId=vendedor-uuid" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash Impersonate Vendedor (Ventana)
+curl -X GET "https://api.example.com/api/v1/restrictions/me?vendedorId=vendedor-uuid" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "success": true,
+  "data": {
+    "general": [
+      {
+        "id": "rule-banca-1",
+        "bancaId": "banca-uuid",
+        "ventanaId": null,
+        "userId": null,
+        "number": null,
+        "maxTotal": 50000,
+        "salesCutoffMinutes": 10,
+        "loteriaId": "loteria-uuid",
+        "priority": 1,
+        "isActive": true
+      },
+      {
+        "id": "rule-ventana-1",
+        "bancaId": null,
+        "ventanaId": "ventana-uuid",
+        "userId": null,
+        "number": "25",
+        "maxAmount": 4000,
+        "priority": 10,
+        "isActive": true
+      }
+    ],
+    "vendorSpecific": [
+      {
+        "id": "rule-user-1",
+        "bancaId": null,
+        "ventanaId": null,
+        "userId": "vendedor-uuid",
+        "number": "25",
+        "maxAmount": 3000,
+        "priority": 100,
+        "message": "Límite especial para este vendedor",
+        "isActive": true
+      }
+    ]
+  }
+}
+```
+
+### Priority Resolution
+
+When multiple rules match a bet:
+
+1. **User-specific rules** (priority 100) are checked first
+2. **Ventana rules** (priority 10) are checked next
+3. **Banca rules** (priority 1) are checked last
+
+**First matching rule wins** - lower priority rules are ignored.
+
+### Implementation Details
+
+From `src/api/v1/controllers/restrictionRule.controller.ts:93-230`:
+
+```typescript
+async myRestrictions(req: AuthenticatedRequest, res: Response) {
+  const me = req.user!;
+  const { vendedorId } = req.query as any;
+
+  // Build auth context
+  const context: AuthContext = {
+    userId: me.id,
+    role: me.role,
+    ventanaId: me.ventanaId,
+    bancaId: req.bancaContext?.bancaId || null,
+  };
+
+  // Apply RBAC filters to validate vendedorId permission
+  const effectiveFilters = await applyRbacFilters(context, { vendedorId });
+  const effectiveVendorId = effectiveFilters.vendedorId || me.id;
+
+  // Fetch vendedor context if impersonating
+  let effectiveBancaId = req.bancaContext?.bancaId || null;
+  let effectiveVentanaId = me.ventanaId || null;
+
+  if (effectiveVendorId !== me.id) {
+    const vendor = await prisma.user.findUnique({
+      where: { id: effectiveVendorId },
+      select: {
+        ventanaId: true,
+        ventana: { select: { bancaId: true } },
+      },
+    });
+
+    if (vendor) {
+      effectiveVentanaId = vendor.ventanaId;
+      effectiveBancaId = vendor.ventana?.bancaId || null;
+    }
+  }
+
+  // Fetch effective restrictions
+  const result = await RestrictionRuleService.forVendor(
+    effectiveVendorId,
+    effectiveBancaId,
+    effectiveVentanaId
+  );
+
+  res.json({ success: true, data: result });
+}
+```
+
+### Use Cases
+
+<AccordionGroup>
+  <Accordion title="Vendedor dashboard on login">
+    Cache effective restrictions client-side to show real-time limit warnings:
+    
+    ```javascript
+    const { data } = await fetch('/api/v1/restrictions/me');
+    localStorage.setItem('myRestrictions', JSON.stringify(data));
+    ```
+  </Accordion>
+  
+  <Accordion title="Admin troubleshooting">
+    Check what restrictions a specific vendedor sees:
+    
+    ```bash
+    GET /api/v1/restrictions/me?vendedorId=problem-vendor-uuid
+    ```
+  </Accordion>
+  
+  <Accordion title="Ventana monitoring">
+    VENTANA users can check restrictions for their team:
+    
+    ```javascript
+    vendedores.forEach(async (v) => {
+      const res = await fetch(`/api/v1/restrictions/me?vendedorId=${v.id}`);
+      console.log(`${v.name} restrictions:`, res.data);
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Error Responses
+
+<ResponseExample>
+```json 404 Not Found
+{
+  "success": false,
+  "error": "Restriction rule not found",
+  "code": "NOT_FOUND"
+}
+```
+
+```json 403 Forbidden - Impersonation
+{
+  "success": false,
+  "error": "No tiene permisos para ver las restricciones de este vendedor",
+  "code": "FORBIDDEN"
+}
+```
+</ResponseExample>
+
+## Related Endpoints
+
+<CardGroup cols={3}>
+  <Card title="List Restrictions" icon="list" href="/api/restrictions/list">
+    View all restriction rules
+  </Card>
+  <Card title="Create Restriction" icon="plus" href="/api/restrictions/create">
+    Create new restriction rule
+  </Card>
+  <Card title="Update Restriction" icon="pen" href="/api/restrictions/update">
+    Modify existing rule
+  </Card>
+</CardGroup>

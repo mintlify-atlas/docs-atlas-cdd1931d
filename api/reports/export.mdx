@@ -1,0 +1,91 @@
+---
+title: Export Dashboard
+api: GET /api/v1/admin/dashboard/export
+description: Export dashboard data to CSV, Excel, or PDF
+---
+
+## Overview
+
+Exports dashboard data in CSV, XLSX, or PDF format. Includes all metrics, breakdowns, and KPIs.
+
+## Authentication
+
+Requires JWT authentication. **VENDEDOR** role is not authorized.
+
+## Query Parameters
+
+<ParamField query="format" type="enum" default="csv">
+  Export format: `csv`, `xlsx`, `pdf`
+</ParamField>
+
+<ParamField query="date" type="enum" default="today">
+  Date range: `today`, `yesterday`, `week`, `month`, `year`, `range`
+</ParamField>
+
+<ParamField query="fromDate" type="string">
+  Start date `YYYY-MM-DD` (auto-uses `range` if both dates provided)
+</ParamField>
+
+<ParamField query="toDate" type="string">
+  End date `YYYY-MM-DD`
+</ParamField>
+
+<ParamField query="ventanaId" type="string">
+  Filter by ventana
+</ParamField>
+
+<ParamField query="loteriaId" type="string">
+  Filter by lottery
+</ParamField>
+
+<ParamField query="scope" type="enum" default="all">
+  Data scope: `all`, `mine`
+</ParamField>
+
+<ParamField query="dimension" type="enum">
+  Breakdown dimension: `ventana`, `loteria`, `vendedor`
+</ParamField>
+
+## Response
+
+Returns file download with appropriate MIME type:
+- **CSV**: `text/csv; charset=utf-8` (with UTF-8 BOM for Excel compatibility)
+- **XLSX**: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+- **PDF**: `application/pdf`
+
+Filename format: `dashboard-YYYY-MM-DD.{format}`
+
+## CSV Format
+
+Includes sections:
+1. KPIs (key-value pairs)
+2. Breakdown by dimension (if specified)
+3. Alerts (if any)
+
+## Excel Format
+
+Multiple sheets:
+- **Resumen**: KPIs and totals
+- **Desgloses**: Breakdowns by dimension
+- **Alertas**: Risk alerts
+
+## PDF Format
+
+Formatted report with:
+- Header with date range
+- KPI summary table
+- Breakdown tables
+- Alert section
+
+## Example Request
+
+```bash
+GET /api/v1/admin/dashboard/export?format=xlsx&date=month&dimension=ventana
+```
+
+## Headers
+
+```
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+Content-Disposition: attachment; filename="dashboard-2024-03-15.xlsx"
+```

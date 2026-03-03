@@ -1,0 +1,477 @@
+---
+title: Database Migrations
+description: Prisma migration management and database schema updates
+---
+
+## Overview
+
+The Banca Management Backend uses **Prisma ORM** for database schema management and migrations. This guide covers safe migration practices, common workflows, and troubleshooting.
+
+---
+
+## Migration Scripts
+
+All migration scripts are defined in `package.json`:
+
+```json package.json
+{
+  "scripts": {
+    "prisma:generate": "prisma generate",
+    "prisma:format": "prisma format",
+    "migrate:create": "npx dotenv-cli -e .env.local -- prisma migrate dev --create-only",
+    "migrate:dev": "npx dotenv-cli -e .env.local -- prisma migrate dev",
+    "migrate:deploy": "node scripts/safe-deploy-check.js && npx dotenv-cli -e .env.local -- prisma migrate deploy",
+    "migrate:status": "npx dotenv-cli -e .env.local -- prisma migrate status",
+    "migrate:resolve": "npx dotenv-cli -e .env.local -- prisma migrate resolve",
+    "db:push": "npx dotenv-cli -e .env.local -- prisma db push",
+    "db:pull": "npx dotenv-cli -e .env.local -- prisma db pull",
+    "studio": "npx dotenv-cli -e .env.local -- prisma studio"
+  }
+}
+```
+
+---
+
+## Development Workflow
+
+### 1. Create a New Migration
+
+<Steps>
+
+<Step title="Modify Schema">
+Edit `prisma/schema.prisma` to add/modify models:
+
+```prisma schema.prisma
+model Ticket {
+  id              String   @id @default(uuid()) @db.Uuid
+  ticketNumber    Int      @unique
+  totalAmount     Decimal  @db.Decimal(10, 2)
+  status          TicketStatus @default(PENDING)
+  // ... other fields
+}
+```
+</Step>
+
+<Step title="Format Schema">
+```bash
+npm run prisma:format
+```
+
+Automatically formats your Prisma schema file.
+</Step>
+
+<Step title="Create Migration (Without Applying)">
+```bash
+npm run migrate:create
+```
+
+- Creates a new migration file in `prisma/migrations/`
+- Does **not** apply the migration
+- Useful for reviewing SQL before applying
+</Step>
+
+<Step title="Apply Migration to Dev Database">
+```bash
+npm run migrate:dev
+```
+
+- Creates and applies migration
+- Updates Prisma Client
+- Useful for rapid development iteration
+</Step>
+
+</Steps>
+
+<Info>
+Development migrations use `.env.local` environment file. Make sure your `DATABASE_URL` points to your development database.
+</Info>
+
+---
+
+## Production Deployment
+
+<Warning>
+**Critical**: Always use `migrate:deploy` in production. Never use `migrate:dev` in production as it can drop data.
+</Warning>
+
+### Deploy Migrations
+
+```bash
+npm run migrate:deploy
+```
+
+**What it does:**
+1. Runs `safe-deploy-check.js` pre-flight validation
+2. Applies pending migrations only (no schema drift detection)
+3. Does not create new migrations
+4. Does not reset the database
+
+**When to use:**
+- CI/CD pipeline deployment
+- Production environment updates
+- Staging environment updates
+
+---
+
+## Migration Status and Troubleshooting
+
+### Check Migration Status
+
+```bash
+npm run migrate:status
+```
+
+**Output examples:**
+
+<CodeGroup>
+```text All Applied
+Database schema is up to date!
+
+All migrations have been applied:
+  20250101000000_initial_schema
+  20250115000000_add_commission_system
+  20250120000000_add_account_statements
+```
+
+```text Pending Migrations
+Your database is not up to date!
+
+Pending migrations:
+  20250125000000_add_sorteo_auto_close
+  20250126000000_update_restriction_rules
+
+Run: prisma migrate deploy
+```
+
+```text Schema Drift
+Your database schema is not in sync with your migration history!
+
+Unexpected table detected: custom_table
+
+Run: prisma migrate dev to align
+```
+</CodeGroup>
+
+---
+
+## Resolve Failed Migrations
+
+### Scenario: Migration Failed Halfway
+
+If a migration fails during deployment:
+
+<Steps>
+
+<Step title="Check Status">
+```bash
+npm run migrate:status
+```
+
+Identify which migration is in a failed state.
+</Step>
+
+<Step title="Manual Database Fix">
+Connect to your database and manually fix the issue:
+
+```sql
+-- Example: Complete the failed migration manually
+ALTER TABLE "Ticket" ADD COLUMN "newField" TEXT;
+```
+</Step>
+
+<Step title="Mark Migration as Applied">
+```bash
+npm run migrate:resolve -- --applied "20250125000000_migration_name"
+```
+
+Marks the migration as successfully applied.
+</Step>
+
+<Step title="Mark Migration as Rolled Back">
+If you need to roll back:
+
+```bash
+npm run migrate:resolve -- --rolled-back "20250125000000_migration_name"
+```
+</Step>
+
+</Steps>
+
+<Warning>
+`migrate:resolve` is a manual override. Only use when you're certain of the database state.
+</Warning>
+
+---
+
+## Database Connection for Migrations
+
+### Use DIRECT_URL
+
+Prisma migrations require a direct database connection (not connection pooler):
+
+```bash .env
+# Transaction Pooler (port 6543) - DON'T use for migrations
+DATABASE_URL=postgresql://user:pass@host.supabase.com:6543/postgres?pgbouncer=true
+
+# Direct Connection (port 5432) - USE for migrations
+DIRECT_URL=postgresql://user:pass@host.supabase.co:5432/postgres
+```
+
+**Prisma configuration:**
+```prisma schema.prisma
+datasource db {
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  directUrl    = env("DIRECT_URL")  // Used for migrations
+  relationMode = "foreignKeys"
+}
+```
+
+---
+
+## Common Migration Patterns
+
+### Add a New Column
+
+```prisma
+model Ticket {
+  // ... existing fields
+  @@@ add-next-line
+  newField    String?  // Nullable for backwards compatibility
+}
+```
+
+**Migration SQL:**
+```sql
+ALTER TABLE "Ticket" ADD COLUMN "newField" TEXT;
+```
+
+### Add Column with Default Value
+
+```prisma
+model Ticket {
+  // ... existing fields
+  @@@ add-next-line
+  status    TicketStatus @default(PENDING)
+}
+```
+
+**Migration SQL:**
+```sql
+ALTER TABLE "Ticket" ADD COLUMN "status" TEXT NOT NULL DEFAULT 'PENDING';
+```
+
+### Create a New Table
+
+```prisma
+model ActivityLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String?  @db.Uuid
+  action      String
+  targetType  String?
+  targetId    String?  @db.Uuid
+  details     Json?
+  createdAt   DateTime @default(now())
+  
+  user        User?    @relation(fields: [userId], references: [id])
+}
+```
+
+### Add Index for Performance
+
+```prisma
+model Ticket {
+  // ... fields
+  
+  @@index([ticketNumber])
+  @@index([status, createdAt])
+  @@index([vendedorId, createdAt])
+}
+```
+
+**Migration SQL:**
+```sql
+CREATE INDEX "Ticket_ticketNumber_idx" ON "Ticket"("ticketNumber");
+CREATE INDEX "Ticket_status_createdAt_idx" ON "Ticket"("status", "createdAt");
+```
+
+---
+
+## Prisma Studio
+
+### Launch Database GUI
+
+```bash
+# Development database
+npm run studio
+
+# Test database
+npm run studio:test
+```
+
+Opens Prisma Studio at `http://localhost:5555` for visual database exploration and editing.
+
+<Warning>
+**Production Warning**: Never expose Prisma Studio to the internet. It provides full database access without authentication.
+</Warning>
+
+---
+
+## Database Push (Prototyping)
+
+### Quick Schema Updates (Dev Only)
+
+```bash
+npm run db:push
+```
+
+**What it does:**
+- Pushes schema changes directly to database
+- **Does not** create migration files
+- Useful for rapid prototyping
+
+**When to use:**
+- Early development/prototyping
+- Experimenting with schema designs
+
+**When NOT to use:**
+- Production environments
+- When you need migration history
+- Team collaboration (others won't get changes)
+
+---
+
+## Database Pull (Reverse Engineering)
+
+```bash
+npm run db:pull
+```
+
+**What it does:**
+- Introspects existing database
+- Generates `schema.prisma` from database structure
+
+**When to use:**
+- Importing existing database to Prisma
+- Recovering schema from database
+- Syncing after manual database changes
+
+---
+
+## Migration Best Practices
+
+<Steps>
+
+<Step title="Always Test Migrations Locally">
+Run migrations on local/staging database first:
+
+```bash
+npm run migrate:dev
+```
+
+Verify application works with new schema.
+</Step>
+
+<Step title="Review Generated SQL">
+Check migration SQL files in `prisma/migrations/`:
+
+```sql 20250125000000_example/migration.sql
+-- CreateTable
+CREATE TABLE "NewTable" (
+  "id" UUID NOT NULL,
+  "name" TEXT NOT NULL,
+  PRIMARY KEY ("id")
+);
+```
+</Step>
+
+<Step title="Plan for Backwards Compatibility">
+- Add new columns as **nullable** first
+- Backfill data before making NOT NULL
+- Use default values for required fields
+</Step>
+
+<Step title="Coordinate with Deployments">
+- Deploy migrations before application code
+- Ensure zero-downtime compatibility
+- Consider multi-phase migrations for breaking changes
+</Step>
+
+<Step title="Backup Before Major Changes">
+Always backup production database before:
+- Dropping columns/tables
+- Changing data types
+- Large data migrations
+</Step>
+
+</Steps>
+
+---
+
+## Seeding Data
+
+### Development Seed
+
+```bash
+npm run prisma:seed
+```
+
+**Test environment seed:**
+```bash
+npm run prisma:seed:test
+```
+
+**Seed script location:** `prisma/seed.ts`
+
+---
+
+## Troubleshooting
+
+### Error: P2034 (Transaction Conflict)
+
+**Problem**: Migration failed due to concurrent changes
+
+**Solution**:
+1. Run migrations during low-traffic periods
+2. Use `DIRECT_URL` (port 5432)
+3. Check for locked tables: `SELECT * FROM pg_locks;`
+
+### Error: Shadow Database Issues
+
+**Problem**: Supabase/PgBouncer doesn't support shadow database
+
+**Solution**: Already configured in `schema.prisma`:
+```prisma
+datasource db {
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  directUrl    = env("DIRECT_URL")
+  relationMode = "foreignKeys"
+  // Shadow database disabled for Supabase/PgBouncer
+}
+```
+
+Use `migrate deploy` instead of `migrate dev` in production.
+
+### Error: Connection Timeout
+
+**Problem**: Migration timing out
+
+**Solutions**:
+- Increase connection timeout in `DATABASE_URL`
+- Break large migrations into smaller chunks
+- Run during low-traffic periods
+- Check database server load
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Deployment Guide" icon="rocket" href="/operations/deployment">
+    Learn about production deployment
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/operations/monitoring">
+    Set up database monitoring
+  </Card>
+</CardGroup>

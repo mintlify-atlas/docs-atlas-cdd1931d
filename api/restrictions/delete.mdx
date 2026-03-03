@@ -1,0 +1,243 @@
+---
+title: Delete & Restore Restriction Rules
+description: Soft delete and restore restriction rules with audit trail
+---
+
+## Delete Restriction
+
+Soft delete a restriction rule. The rule is marked as inactive but not permanently removed.
+
+### Endpoint
+
+```http
+DELETE /api/v1/restrictions/:id
+```
+
+**Authorization:** ADMIN only
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the restriction rule to delete
+</ParamField>
+
+### Request Body
+
+<ParamField body="reason" type="string">
+  Optional reason for deletion (3-200 characters)
+  
+  Stored for audit purposes and compliance.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Deleted restriction rule with:
+  - `isActive = false`
+  - `deletedAt` timestamp
+  - `deletedReason` (if provided)
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+```bash Delete with Reason
+curl -X DELETE "https://api.example.com/api/v1/restrictions/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reason": "Número 25 ya no es popular, eliminando restricción"
+  }'
+```
+
+```bash Delete without Reason
+curl -X DELETE "https://api.example.com/api/v1/restrictions/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "bancaId": "banca-uuid",
+    "number": "25",
+    "maxAmount": 5000,
+    "isActive": false,
+    "deletedAt": "2025-03-15T14:30:00.000Z",
+    "deletedReason": "Número 25 ya no es popular, eliminando restricción"
+  }
+}
+```
+
+### Implementation Details
+
+From `src/api/v1/controllers/restrictionRule.controller.ts:24-31`:
+
+```typescript
+async delete(req: AuthenticatedRequest, res: Response) {
+  const rule = await RestrictionRuleService.remove(
+    req.user!.id,
+    req.params.id,
+    req.body?.reason
+  );
+  res.json({ success: true, data: rule });
+}
+```
+
+---
+
+## Restore Restriction
+
+Restore a soft-deleted restriction rule, making it active again.
+
+### Endpoint
+
+```http
+PATCH /api/v1/restrictions/:id/restore
+```
+
+**Authorization:** ADMIN only
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the restriction rule to restore
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Restored restriction rule with:
+  - `isActive = true`
+  - `deletedAt = null`
+  - `deletedReason = null`
+</ResponseField>
+
+### Example
+
+```bash
+curl -X PATCH "https://api.example.com/api/v1/restrictions/550e8400-e29b-41d4-a716-446655440000/restore" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Response Example
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "bancaId": "banca-uuid",
+    "number": "25",
+    "maxAmount": 5000,
+    "isActive": true,
+    "deletedAt": null,
+    "deletedReason": null,
+    "updatedAt": "2025-03-15T15:00:00.000Z"
+  }
+}
+```
+
+### Implementation Details
+
+From `src/api/v1/controllers/restrictionRule.controller.ts:33-38`:
+
+```typescript
+async restore(req: AuthenticatedRequest, res: Response) {
+  const rule = await RestrictionRuleService.restore(
+    req.user!.id,
+    req.params.id
+  );
+  res.json({ success: true, data: rule });
+}
+```
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always include a deletion reason">
+    Providing a clear reason helps with:
+    - Compliance and auditing
+    - Understanding historical decisions
+    - Debugging configuration issues
+    
+    **Good reasons:**
+    - "Número ya no es de alto riesgo"
+    - "Promoción temporal finalizada"
+    - "Error de configuración, recreando correctamente"
+  </Accordion>
+  
+  <Accordion title="Use restore for temporary changes">
+    Instead of deleting and recreating, use:
+    1. Delete with reason: "Deshabilitado temporalmente durante mantenimiento"
+    2. Restore when ready
+    
+    This preserves the rule ID and audit history.
+  </Accordion>
+  
+  <Accordion title="Query deleted rules for audit">
+    Use the List endpoint with `isActive=false` to review deleted rules:
+    
+    ```bash
+    GET /api/v1/restrictions?isActive=false&bancaId=uuid
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Error Responses
+
+<ResponseExample>
+```json 404 Not Found
+{
+  "success": false,
+  "error": "Restriction rule not found",
+  "code": "NOT_FOUND"
+}
+```
+
+```json 400 Bad Request - Already Deleted
+{
+  "success": false,
+  "error": "Rule is already inactive",
+  "code": "ALREADY_INACTIVE"
+}
+```
+
+```json 400 Bad Request - Already Active
+{
+  "success": false,
+  "error": "Rule is already active",
+  "code": "ALREADY_ACTIVE"
+}
+```
+</ResponseExample>
+
+## Related Endpoints
+
+<CardGroup cols={3}>
+  <Card title="Create Restriction" icon="plus" href="/api/restrictions/create">
+    Create new restriction rule
+  </Card>
+  <Card title="Update Restriction" icon="pen" href="/api/restrictions/update">
+    Modify existing rule
+  </Card>
+  <Card title="List Restrictions" icon="list" href="/api/restrictions/list">
+    View all restriction rules
+  </Card>
+</CardGroup>

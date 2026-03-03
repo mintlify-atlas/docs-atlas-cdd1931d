@@ -1,0 +1,317 @@
+---
+title: Get Loteria
+description: Retrieve a single loteria by ID with full configuration details
+---
+
+## GET /api/v1/loterias/:id
+
+Retrieves detailed information about a specific loteria (lottery) by its UUID.
+
+### Authentication
+
+Requires authentication. Available to all roles.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the loteria to retrieve
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the operation was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The loteria object with full details
+  
+  <Expandable title="Loteria Object">
+    <ResponseField name="id" type="string">
+      UUID of the loteria
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Loteria name
+    </ResponseField>
+    
+    <ResponseField name="rulesJson" type="object">
+      Configuration rules
+      
+      <Expandable title="Rules Schema">
+        <ResponseField name="digits" type="integer">
+          Number of digits (2 or 3)
+        </ResponseField>
+        
+        <ResponseField name="drawSchedule" type="object">
+          Schedule configuration
+          
+          <Expandable title="Schedule Schema">
+            <ResponseField name="frequency" type="string">
+              Draw frequency (e.g., "diario")
+            </ResponseField>
+            
+            <ResponseField name="times" type="array">
+              Array of draw times (24-hour format, Costa Rica timezone)
+            </ResponseField>
+            
+            <ResponseField name="daysOfWeek" type="array" nullable>
+              Optional: Days of week (0=Sunday)
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+        
+        <ResponseField name="reventadoConfig" type="object">
+          REVENTADO configuration
+          
+          <Expandable title="Reventado Config">
+            <ResponseField name="enabled" type="boolean">
+              Whether REVENTADO is enabled
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+        
+        <ResponseField name="autoCreateSorteos" type="boolean">
+          Whether sorteos are auto-created
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Whether the loteria is active
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of creation
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl https://api.example.com/api/v1/loterias/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Lotto",
+    "rulesJson": {
+      "digits": 2,
+      "drawSchedule": {
+        "frequency": "diario",
+        "times": ["12:55", "18:55"],
+        "daysOfWeek": null
+      },
+      "reventadoConfig": {
+        "enabled": true
+      },
+      "autoCreateSorteos": true
+    },
+    "isActive": true,
+    "createdAt": "2025-03-03T10:00:00-06:00",
+    "updatedAt": "2025-03-03T10:00:00-06:00"
+  }
+}
+```
+
+### Error Responses
+
+<ResponseExample>
+```json Not Found
+{
+  "success": false,
+  "error": "Lotería not found"
+}
+```
+
+```json Invalid UUID
+{
+  "success": false,
+  "error": "ID de lotería inválido"
+}
+```
+</ResponseExample>
+
+## Understanding Configuration
+
+<AccordionGroup>
+  <Accordion title="Digits Configuration" icon="hashtag">
+    The `digits` field determines the winning number format:
+    
+    <Tabs>
+      <Tab title="2 Digits (Times)">
+        **Times/Tiempos Lottery**
+        
+        - Valid numbers: 00-99
+        - Display format: "00" to "99"
+        - Example: "42", "07"
+      </Tab>
+      
+      <Tab title="3 Digits (Monazos)">
+        **Monazos Lottery**
+        
+        - Valid numbers: 000-999
+        - Display format: "000" to "999"
+        - Example: "123", "007"
+      </Tab>
+    </Tabs>
+  </Accordion>
+  
+  <Accordion title="Draw Schedule" icon="calendar">
+    The `drawSchedule` defines when sorteos are auto-generated:
+    
+    ```json
+    {
+      "frequency": "diario",
+      "times": ["12:55", "18:55"],
+      "daysOfWeek": [1, 2, 3, 4, 5]
+    }
+    ```
+    
+    This creates sorteos:
+    - Every weekday (Mon-Fri)
+    - At 12:55 PM and 6:55 PM
+    - In Costa Rica timezone
+  </Accordion>
+  
+  <Accordion title="REVENTADO Config" icon="burst">
+    When `reventadoConfig.enabled: true`:
+    
+    - Sorteos inherit `reventadoEnabled: true`
+    - Vendedores can sell REVENTADO bets
+    - Evaluation can include extra multipliers
+    - Additional payouts for REVENTADO winners
+    
+    See [Multipliers Guide](/concepts/multipliers) for details.
+  </Accordion>
+  
+  <Accordion title="Auto-Create Sorteos" icon="robot">
+    The `autoCreateSorteos` flag controls automatic generation:
+    
+    <Tabs>
+      <Tab title="Enabled (true)">
+        - Sorteos created by cron job
+        - Based on `drawSchedule`
+        - Runs daily (configurable)
+        - Idempotent (no duplicates)
+      </Tab>
+      
+      <Tab title="Disabled (false)">
+        - Manual creation only
+        - Use [Seed Sorteos](/api/loterias/seed-sorteos) with `forceCreate: true`
+        - Or [Create Sorteo](/api/sorteos/create) individually
+      </Tab>
+    </Tabs>
+  </Accordion>
+</AccordionGroup>
+
+## Example Configurations
+
+<CodeGroup>
+```json Daily Lotto (2x/day)
+{
+  "id": "loteria-uuid",
+  "name": "Lotto",
+  "rulesJson": {
+    "digits": 2,
+    "drawSchedule": {
+      "frequency": "diario",
+      "times": ["12:55", "18:55"]
+    },
+    "reventadoConfig": {
+      "enabled": true
+    },
+    "autoCreateSorteos": true
+  },
+  "isActive": true
+}
+```
+
+```json Monazo (3 digits, 1x/day)
+{
+  "id": "loteria-uuid",
+  "name": "Monazo",
+  "rulesJson": {
+    "digits": 3,
+    "drawSchedule": {
+      "frequency": "diario",
+      "times": ["13:00"]
+    },
+    "reventadoConfig": {
+      "enabled": false
+    },
+    "autoCreateSorteos": true
+  },
+  "isActive": true
+}
+```
+
+```json Weekend Only Lottery
+{
+  "id": "loteria-uuid",
+  "name": "Weekend Draw",
+  "rulesJson": {
+    "digits": 2,
+    "drawSchedule": {
+      "frequency": "diario",
+      "times": ["20:00"],
+      "daysOfWeek": [0, 6]
+    },
+    "reventadoConfig": {
+      "enabled": true
+    },
+    "autoCreateSorteos": true
+  },
+  "isActive": true
+}
+// Only runs on Sunday (0) and Saturday (6)
+```
+</CodeGroup>
+
+## Use Cases
+
+<Steps>
+  <Step title="View Configuration">
+    Retrieve loteria details to understand draw schedule and rules.
+  </Step>
+  
+  <Step title="Verify Schedule">
+    Check `drawSchedule` before using [Preview Schedule](/api/loterias/preview-schedule).
+  </Step>
+  
+  <Step title="Check REVENTADO">
+    Verify if REVENTADO is enabled for this loteria.
+  </Step>
+  
+  <Step title="Create Sorteos">
+    Use configuration to manually create sorteos or seed them.
+  </Step>
+</Steps>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="List Loterias" icon="list" href="/api/loterias/list">
+    Get all loterias
+  </Card>
+  <Card title="Update Loteria" icon="pen" href="/api/loterias/update">
+    Modify configuration
+  </Card>
+  <Card title="Preview Schedule" icon="calendar" href="/api/loterias/preview-schedule">
+    See generated sorteos
+  </Card>
+  <Card title="Seed Sorteos" icon="seedling" href="/api/loterias/seed-sorteos">
+    Generate sorteos from schedule
+  </Card>
+</CardGroup>

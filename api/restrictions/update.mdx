@@ -1,0 +1,237 @@
+---
+title: Update Restriction Rule
+description: Modify existing restriction rules (amount limits, cutoffs, active status)
+---
+
+## Overview
+
+Update an existing restriction rule. Only specified fields are modified (partial update).
+
+## Endpoint
+
+```http
+PATCH /api/v1/restrictions/:id
+```
+
+**Authorization:** ADMIN only
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the restriction rule to update
+</ParamField>
+
+## Request Body
+
+<Warning>
+  **Cannot modify:** `scope`, `entityId` (bancaId/ventanaId/userId), `loteriaId`, or `number` after creation.
+  
+  To change these fields, delete and recreate the rule instead.
+</Warning>
+
+### Updatable Fields
+
+<ParamField body="restrictionType" type="string">
+  Rule type label
+</ParamField>
+
+<ParamField body="isActive" type="boolean">
+  Enable or disable the rule without deleting it
+</ParamField>
+
+<ParamField body="isAutoDate" type="boolean">
+  Enable/disable automatic date synchronization
+</ParamField>
+
+<ParamField body="number" type="string">
+  **Legacy single-number format only** (batch updates not supported)
+  
+  To update multiple numbers, delete and recreate.
+</ParamField>
+
+<ParamField body="maxAmount" type="number">
+  Maximum bet amount per jugada (must be positive)
+</ParamField>
+
+<ParamField body="maxTotal" type="number">
+  Maximum total amount per ticket (must be positive)
+</ParamField>
+
+<ParamField body="baseAmount" type="number">
+  Base amount for dynamic limits (≥ 0)
+</ParamField>
+
+<ParamField body="salesPercentage" type="number">
+  Sales percentage for dynamic limits (0-100)
+</ParamField>
+
+<ParamField body="appliesToVendedor" type="boolean">
+  Whether percentage applies per-vendedor
+</ParamField>
+
+<ParamField body="salesCutoffMinutes" type="number">
+  Minutes before draw to stop sales (0-30)
+</ParamField>
+
+<ParamField body="appliesToDate" type="string">
+  ISO 8601 date filter (or null to remove filter)
+</ParamField>
+
+<ParamField body="appliesToHour" type="number">
+  Hour filter 0-23 (or null to remove filter)
+</ParamField>
+
+<ParamField body="multiplierId" type="string">
+  Multiplier UUID
+</ParamField>
+
+<ParamField body="message" type="string">
+  Custom message (1-255 characters, or null to remove)
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Updated restriction rule (see List endpoint for full schema)
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash Update Amount Limit
+curl -X PATCH "https://api.example.com/api/v1/restrictions/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "maxAmount": 6000,
+    "message": "Límite actualizado"
+  }'
+```
+
+```bash Disable Rule Temporarily
+curl -X PATCH "https://api.example.com/api/v1/restrictions/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "isActive": false
+  }'
+```
+
+```bash Update Cutoff Time
+curl -X PATCH "https://api.example.com/api/v1/restrictions/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "salesCutoffMinutes": 15
+  }'
+```
+
+```bash Add Date Filter
+curl -X PATCH "https://api.example.com/api/v1/restrictions/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "appliesToDate": "2025-12-25T00:00:00.000Z",
+    "message": "Restricción navideña"
+  }'
+```
+</CodeGroup>
+
+## Validation Rules
+
+<AccordionGroup>
+  <Accordion title="Cutoff rules cannot mix with other types">
+    Cannot update a cutoff rule to have amount limits, or vice versa.
+  </Accordion>
+  
+  <Accordion title="Auto-date validation">
+    If setting `isAutoDate = true`:
+    - `number` field must be omitted or null
+    - Rule must have `maxAmount` or `maxTotal`
+  </Accordion>
+  
+  <Accordion title="Dynamic limits validation">
+    `salesPercentage` requires:
+    - Value between 0-100
+    - Used with amount-based rules only
+    
+    `appliesToVendedor` only valid when `salesPercentage` is present.
+  </Accordion>
+</AccordionGroup>
+
+## Response Example
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "bancaId": "banca-uuid",
+    "ventanaId": null,
+    "userId": null,
+    "number": "25",
+    "maxAmount": 6000,
+    "message": "Límite actualizado",
+    "isActive": true,
+    "updatedAt": "2025-03-15T14:30:00.000Z"
+  }
+}
+```
+
+## Error Responses
+
+<ResponseExample>
+```json 404 Not Found
+{
+  "success": false,
+  "error": "Restriction rule not found",
+  "code": "NOT_FOUND"
+}
+```
+
+```json 400 Bad Request - Validation Error
+{
+  "success": false,
+  "error": "Validation failed",
+  "issues": [
+    {
+      "path": ["number"],
+      "message": "Si isAutoDate es true, number debe omitirse."
+    }
+  ]
+}
+```
+</ResponseExample>
+
+## Implementation Details
+
+From `src/api/v1/controllers/restrictionRule.controller.ts:15-22`:
+
+```typescript
+async update(req: AuthenticatedRequest, res: Response) {
+  const rule = await RestrictionRuleService.update(
+    req.user!.id,
+    req.params.id,
+    req.body
+  );
+  res.json({ success: true, data: rule });
+}
+```
+
+## Related Endpoints
+
+<CardGroup cols={3}>
+  <Card title="Get Restriction" icon="eye" href="/api/restrictions/get">
+    View rule details
+  </Card>
+  <Card title="Delete Restriction" icon="trash" href="/api/restrictions/delete">
+    Soft delete a rule
+  </Card>
+  <Card title="Restore Restriction" icon="rotate-left" href="/api/restrictions/delete">
+    Restore a deleted rule
+  </Card>
+</CardGroup>

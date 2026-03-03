@@ -1,0 +1,288 @@
+---
+title: Update Multiplier
+description: Modify multiplier configuration and active status
+---
+
+## Overview
+
+Update an existing multiplier. Supports partial updates (only specified fields are modified).
+
+## Endpoint
+
+```http
+PATCH /api/v1/multipliers/:id
+```
+
+**Alternative:** `PUT /api/v1/multipliers/:id` (same behavior)
+
+**Authorization:** ADMIN only
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the multiplier to update
+</ParamField>
+
+## Request Body
+
+<ParamField body="loteriaId" type="string">
+  UUID of the lottery
+</ParamField>
+
+<ParamField body="name" type="string">
+  Display name (2-32 characters)
+</ParamField>
+
+<ParamField body="valueX" type="number">
+  Multiplier value (must be positive)
+</ParamField>
+
+<ParamField body="kind" type="string">
+  Multiplier type: `NUMERO` or `REVENTADO`
+</ParamField>
+
+<ParamField body="appliesToDate" type="string">
+  ISO 8601 date (or null to remove filter)
+</ParamField>
+
+<ParamField body="appliesToSorteoId" type="string">
+  Sorteo UUID (or null to remove filter)
+</ParamField>
+
+<ParamField body="isActive" type="boolean">
+  Enable or disable the multiplier
+</ParamField>
+
+## Soft Delete
+
+To soft delete a multiplier, send a DELETE request:
+
+```http
+DELETE /api/v1/multipliers/:id
+```
+
+With body:
+
+```json
+{
+  "isActive": false
+}
+```
+
+Or to re-enable:
+
+```json
+{
+  "isActive": true
+}
+```
+
+## Restore
+
+Restore a soft-deleted multiplier:
+
+```http
+PATCH /api/v1/multipliers/:id/restore
+```
+
+**No request body required.**
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Updated multiplier (see Get Multiplier for full schema)
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash Update Value
+curl -X PATCH "https://api.example.com/api/v1/multipliers/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "valueX": 85
+  }'
+```
+
+```bash Update Name and Active Status
+curl -X PATCH "https://api.example.com/api/v1/multipliers/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Base Actualizado",
+    "isActive": true
+  }'
+```
+
+```bash Set Sorteo Filter
+curl -X PATCH "https://api.example.com/api/v1/multipliers/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "appliesToSorteoId": "sorteo-uuid"
+  }'
+```
+
+```bash Remove Sorteo Filter
+curl -X PATCH "https://api.example.com/api/v1/multipliers/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "appliesToSorteoId": null
+  }'
+```
+
+```bash Soft Delete (Deactivate)
+curl -X DELETE "https://api.example.com/api/v1/multipliers/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "isActive": false
+  }'
+```
+
+```bash Restore
+curl -X PATCH "https://api.example.com/api/v1/multipliers/550e8400-e29b-41d4-a716-446655440000/restore" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "loteriaId": "loteria-uuid",
+    "name": "Base Actualizado",
+    "valueX": 85,
+    "kind": "NUMERO",
+    "appliesToDate": null,
+    "appliesToSorteoId": null,
+    "isActive": true,
+    "updatedAt": "2025-03-15T14:30:00.000Z"
+  }
+}
+```
+
+## Snapshot Immutability
+
+<Warning>
+  **Changes do not affect existing tickets**
+  
+  Multipliers are frozen (`finalMultiplierX`) when tickets are created. Updating a multiplier only affects:
+  - New tickets created after the update
+  - Future sorteo evaluations (for REVENTADO)
+  
+  Existing tickets retain their original multiplier values.
+</Warning>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use soft delete instead of permanent deletion">
+    Deactivate multipliers with `isActive: false` instead of permanently deleting them.
+    
+    This preserves audit trails and allows restoration if needed.
+  </Accordion>
+  
+  <Accordion title="Test changes in development first">
+    Before updating production multipliers:
+    1. Test in development environment
+    2. Review exposure analytics
+    3. Communicate changes to operators
+    4. Monitor initial sales after update
+  </Accordion>
+  
+  <Accordion title="Document value changes">
+    Keep a changelog of multiplier value changes for compliance and analysis:
+    
+    ```
+    2025-03-15: Base 80x -> 85x (promotional period)
+    2025-03-31: Base 85x -> 80x (end of promotion)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Error Responses
+
+<ResponseExample>
+```json 404 Not Found
+{
+  "success": false,
+  "error": "Multiplier not found",
+  "code": "NOT_FOUND"
+}
+```
+
+```json 400 Bad Request - Validation Error
+{
+  "success": false,
+  "error": "Validation failed",
+  "issues": [
+    {
+      "path": ["valueX"],
+      "message": "valueX must be positive"
+    }
+  ]
+}
+```
+
+```json 400 Bad Request - Invalid Sorteo
+{
+  "success": false,
+  "error": "Sorteo does not belong to this loteria",
+  "code": "INVALID_SORTEO"
+}
+```
+</ResponseExample>
+
+## Related Endpoints
+
+<CardGroup cols={3}>
+  <Card title="Get Multiplier" icon="eye" href="/api/multipliers/get">
+    View multiplier details
+  </Card>
+  <Card title="List Multipliers" icon="list" href="/api/multipliers/list">
+    View all multipliers
+  </Card>
+  <Card title="Create Multiplier" icon="plus" href="/api/multipliers/create">
+    Create new multiplier
+  </Card>
+</CardGroup>
+
+## Implementation Details
+
+From `src/api/v1/controllers/multiplier.controller.ts:11-14`:
+
+```typescript
+async update(req: AuthenticatedRequest, res: Response) {
+  const r = await MultiplierService.update(req.user!.id, req.params.id, req.body);
+  return res.json({ success: true, data: r });
+}
+```
+
+Soft delete from `src/api/v1/controllers/multiplier.controller.ts:16-20`:
+
+```typescript
+async softDelete(req: AuthenticatedRequest, res: Response) {
+  const enable = req.body?.isActive === true;
+  const r = await MultiplierService.softDelete(req.user!.id, req.params.id, enable);
+  return res.json({ success: true, data: r });
+}
+```
+
+Restore from `src/api/v1/controllers/multiplier.controller.ts:22-25`:
+
+```typescript
+async restore(req: AuthenticatedRequest, res: Response) {
+  const r = await MultiplierService.restore(req.user!.id, req.params.id);
+  return res.json({ success: true, data: r });
+}
+```

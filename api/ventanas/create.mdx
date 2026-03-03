@@ -1,0 +1,233 @@
+---
+title: 'Create Ventana'
+api: 'POST /api/v1/ventanas'
+description: 'Create a new ventana (betting window) with automatic user creation. Only accessible by ADMIN role.'
+---
+
+## Overview
+
+Creates a new ventana (betting window) in the system. Automatically creates an associated VENTANA user account. Part of the hierarchy: **Banca → Ventana → Vendedor**.
+
+## Authorization
+
+<Info>**Required role:** ADMIN</Info>
+
+## Request Body
+
+<ParamField body="bancaId" type="string" required>
+  UUID of the parent banca
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Ventana name (2-100 characters)
+</ParamField>
+
+<ParamField body="code" type="string">
+  Unique ventana code (2-10 characters, optional but recommended)
+</ParamField>
+
+<ParamField body="username" type="string" required>
+  Username for the VENTANA user account (3-100 characters, alphanumeric, underscores, and hyphens only)
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Password for the VENTANA user account (minimum 6 characters)
+</ParamField>
+
+<ParamField body="commissionMarginX" type="number">
+  Commission margin multiplier (must be >= 0)
+</ParamField>
+
+<ParamField body="address" type="string">
+  Physical address (max 255 characters)
+</ParamField>
+
+<ParamField body="phone" type="string">
+  Contact phone number (max 20 characters)
+</ParamField>
+
+<ParamField body="email" type="string">
+  Contact email address (must be valid email format)
+</ParamField>
+
+<ParamField body="isActive" type="boolean" default="true">
+  Whether the ventana is active
+</ParamField>
+
+<ParamField body="settings" type="object">
+  Ventana-specific settings
+  
+  <Expandable title="Settings object">
+    <ParamField body="settings.print" type="object">
+      Print configuration settings
+      
+      <Expandable title="Print settings">
+        <ParamField body="settings.print.name" type="string">
+          Printer name (max 100 characters)
+        </ParamField>
+        
+        <ParamField body="settings.print.phone" type="string">
+          Phone to print on receipts (max 32 characters)
+        </ParamField>
+        
+        <ParamField body="settings.print.width" type="number">
+          Paper width: 58 or 88 (mm)
+        </ParamField>
+        
+        <ParamField body="settings.print.footer" type="string">
+          Footer text (max 200 characters)
+        </ParamField>
+        
+        <ParamField body="settings.print.barcode" type="boolean">
+          Whether to print barcodes
+        </ParamField>
+        
+        <ParamField body="settings.print.bluetoothMacAddress" type="string">
+          Bluetooth MAC address (format: AA:BB:CC:DD:EE:FF or AABBCCDD)
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    
+    <ParamField body="settings.theme" type="string">
+      UI theme: "light" or "dark"
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The created ventana object
+  
+  <Expandable title="Ventana object">
+    <ResponseField name="id" type="string">
+      UUID of the ventana
+    </ResponseField>
+    
+    <ResponseField name="bancaId" type="string">
+      Parent banca UUID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Ventana name
+    </ResponseField>
+    
+    <ResponseField name="code" type="string">
+      Unique ventana code
+    </ResponseField>
+    
+    <ResponseField name="commissionMarginX" type="number">
+      Commission margin multiplier
+    </ResponseField>
+    
+    <ResponseField name="address" type="string">
+      Physical address
+    </ResponseField>
+    
+    <ResponseField name="phone" type="string">
+      Contact phone
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Contact email
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Active status
+    </ResponseField>
+    
+    <ResponseField name="settings" type="object">
+      Ventana-specific settings
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Metadata about the operation
+  
+  <Expandable title="Meta object">
+    <ResponseField name="userCreated" type="boolean">
+      Whether a new user was created (always true for create)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 201 - Created
+{
+  "success": true,
+  "message": "Listero y usuario creados correctamente",
+  "data": {
+    "id": "660e8400-e29b-41d4-a716-446655440000",
+    "bancaId": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Ventana Norte",
+    "code": "VN001",
+    "commissionMarginX": 1.5,
+    "address": "789 North Avenue",
+    "phone": "+1-234-567-8910",
+    "email": "ventana.norte@example.com",
+    "isActive": true,
+    "settings": {
+      "print": {
+        "width": 58,
+        "barcode": true
+      },
+      "theme": "light"
+    },
+    "deletedAt": null,
+    "deletedBy": null,
+    "deletedReason": null,
+    "createdAt": "2024-03-15T11:00:00Z",
+    "updatedAt": "2024-03-15T11:00:00Z"
+  },
+  "meta": {
+    "userCreated": true
+  }
+}
+```
+
+```json 400 - Validation Error
+{
+  "success": false,
+  "error": "Validation failed",
+  "details": [
+    {
+      "field": "username",
+      "message": "username debe tener al menos 3 caracteres"
+    }
+  ]
+}
+```
+
+```json 403 - Forbidden
+{
+  "success": false,
+  "error": "Forbidden",
+  "message": "Only ADMIN users can create ventanas"
+}
+```
+</ResponseExample>
+
+## Notes
+
+- Automatically creates a VENTANA role user with the provided username/password
+- Code must be unique across all ventanas
+- Parent banca must exist and be active
+- Username validation: alphanumeric, underscores, and hyphens only (see src/api/v1/validators/ventana.validator.ts:89-94)
+- Activity is logged for audit purposes (see src/api/v1/controllers/ventana.controller.ts:6-15)

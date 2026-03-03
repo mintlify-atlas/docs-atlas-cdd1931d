@@ -1,0 +1,154 @@
+---
+title: Account Statements
+api: GET /api/v1/accounts/statement
+description: Get day-by-day account statements with sales, payouts, and balances
+---
+
+## Overview
+
+Returns account statements showing daily sales, payouts, commissions, payments, and balances. Supports multiple scopes and dimensions with RBAC filtering.
+
+## Authentication
+
+Requires JWT authentication:
+- **VENDEDOR**: `scope=mine` + `dimension=vendedor` (forced to own ID)
+- **VENTANA**: `scope=mine` (own window) or `scope=ventana` (sellers breakdown)
+- **ADMIN**: Any scope/dimension
+
+## Query Parameters
+
+<ParamField query="month" type="string">
+  Month in `YYYY-MM` format (e.g., `2024-03`)
+</ParamField>
+
+<ParamField query="date" type="enum">
+  Date preset: `today`, `yesterday`, `week`, `month`, `year`, `range`
+</ParamField>
+
+<ParamField query="fromDate" type="string">
+  Start date `YYYY-MM-DD` (custom range)
+</ParamField>
+
+<ParamField query="toDate" type="string">
+  End date `YYYY-MM-DD` (custom range)
+</ParamField>
+
+<ParamField query="scope" type="enum" required>
+  Data scope: `mine`, `ventana`, `all`
+</ParamField>
+
+<ParamField query="dimension" type="enum" required>
+  Breakdown dimension: `vendedor`, `ventana`, `banca`
+</ParamField>
+
+<ParamField query="ventanaId" type="string">
+  Filter by ventana (admin only)
+</ParamField>
+
+<ParamField query="vendedorId" type="string">
+  Filter by seller (admin/ventana)
+</ParamField>
+
+<ParamField query="bancaId" type="string">
+  Filter by banca (admin only)
+</ParamField>
+
+<ParamField query="sort" type="enum" default="desc">
+  Sort order: `asc`, `desc`
+</ParamField>
+
+## Response
+
+<ResponseField name="statements" type="array">
+  Daily statement records
+  
+  <Expandable title="Statement object">
+    <ResponseField name="id" type="string">Statement ID</ResponseField>
+    <ResponseField name="date" type="string">Date in `YYYY-MM-DD`</ResponseField>
+    <ResponseField name="totalSales" type="number">Total sales</ResponseField>
+    <ResponseField name="totalPayouts" type="number">Total payouts</ResponseField>
+    <ResponseField name="commissionUser" type="number">User commission</ResponseField>
+    <ResponseField name="commissionVentana" type="number">Window commission</ResponseField>
+    <ResponseField name="totalPaid" type="number">Total payments made</ResponseField>
+    <ResponseField name="totalCollected" type="number">Total collections</ResponseField>
+    <ResponseField name="remainingBalance" type="number">Remaining balance (can be positive or negative)</ResponseField>
+    <ResponseField name="isSaldado" type="boolean">Whether day is settled</ResponseField>
+    <ResponseField name="byVendedor" type="array">Breakdown by seller (if applicable)</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="totals" type="object">
+  Period totals
+  
+  <Expandable title="properties">
+    <ResponseField name="totalSales" type="number">Total sales for period</ResponseField>
+    <ResponseField name="totalPayouts" type="number">Total payouts</ResponseField>
+    <ResponseField name="totalRemainingBalance" type="number">Accumulated balance</ResponseField>
+  </Expandable>
+</ResponseField>
+
+## ETags and Caching
+
+Supports HTTP ETags for efficient caching:
+- `ETag` header included in response
+- `If-None-Match` request header returns `304 Not Modified` if unchanged
+- `Cache-Control: private, max-age=60, stale-while-revalidate=120`
+
+## Example Request
+
+```bash
+GET /api/v1/accounts/statement?month=2024-03&scope=mine&dimension=ventana
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "statements": [
+      {
+        "id": "stmt-001",
+        "date": "2024-03-15",
+        "totalSales": 500000,
+        "totalPayouts": 250000,
+        "commissionUser": 12500,
+        "commissionVentana": 5000,
+        "totalPaid": 100000,
+        "totalCollected": 0,
+        "remainingBalance": 132500,
+        "isSaldado": false
+      },
+      {
+        "id": "stmt-002",
+        "date": "2024-03-14",
+        "totalSales": 450000,
+        "totalPayouts": 200000,
+        "commissionUser": 11250,
+        "commissionVentana": 4500,
+        "totalPaid": 220000,
+        "totalCollected": 0,
+        "remainingBalance": 14750,
+        "isSaldado": true
+      }
+    ],
+    "totals": {
+      "totalSales": 950000,
+      "totalPayouts": 450000,
+      "totalRemainingBalance": 147250
+    }
+  }
+}
+```
+
+## Balance Calculation
+
+Balance per day (for VENTANA/ADMIN viewing windows):
+```
+remainingBalance = totalSales - totalPayouts - commissionVentana - totalPaid + totalCollected
+```
+
+Balance for VENDEDOR:
+```
+remainingBalance = totalPayouts + commissionUser - totalPaid
+```

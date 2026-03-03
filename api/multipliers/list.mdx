@@ -1,0 +1,272 @@
+---
+title: List Multipliers
+description: Retrieve multipliers with filtering and pagination
+---
+
+## Overview
+
+List multipliers across the system with multi-dimensional filtering. Supports filtering by lottery, kind, active status, and sorteo.
+
+## Endpoint
+
+```http
+GET /api/v1/multipliers
+```
+
+**Authorization:** ADMIN, VENTANA, VENDEDOR
+
+## Query Parameters
+
+<ParamField query="loteriaId" type="string">
+  Filter by lottery UUID
+</ParamField>
+
+<ParamField query="kind" type="string">
+  Filter by multiplier type:
+  - `NUMERO`: Standard bet multipliers
+  - `REVENTADO`: REVENTADO multipliers
+</ParamField>
+
+<ParamField query="isActive" type="boolean">
+  Filter by active status:
+  - `true`: Only active multipliers
+  - `false`: Only inactive multipliers
+  - Omit to see all
+</ParamField>
+
+<ParamField query="appliesToSorteoId" type="string">
+  Filter by specific sorteo UUID
+  
+  Returns multipliers that apply to this sorteo (including those with null `appliesToSorteoId`)
+</ParamField>
+
+<ParamField query="q" type="string">
+  Search query (searches multiplier name)
+</ParamField>
+
+<ParamField query="page" type="number" default="1">
+  Page number for pagination (min: 1)
+</ParamField>
+
+<ParamField query="pageSize" type="number" default="20">
+  Items per page (min: 1, max: 100)
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of multipliers
+  
+  <Expandable title="Multiplier properties">
+    <ResponseField name="id" type="string">
+      Multiplier UUID
+    </ResponseField>
+    
+    <ResponseField name="loteriaId" type="string">
+      Lottery UUID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Multiplier name
+    </ResponseField>
+    
+    <ResponseField name="valueX" type="number">
+      Multiplier value
+    </ResponseField>
+    
+    <ResponseField name="kind" type="string">
+      `NUMERO` or `REVENTADO`
+    </ResponseField>
+    
+    <ResponseField name="appliesToDate" type="string">
+      ISO 8601 date filter (null if applies always)
+    </ResponseField>
+    
+    <ResponseField name="appliesToSorteoId" type="string">
+      Sorteo UUID (null if applies to all sorteos)
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Whether multiplier is active
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      Creation timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      Last update timestamp
+    </ResponseField>
+    
+    <ResponseField name="loteria" type="object">
+      Lottery details (if included)
+      - `id` (string): Lottery UUID
+      - `name` (string): Lottery name
+      - `code` (string): Lottery code
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Pagination metadata
+  
+  <Expandable title="properties">
+    <ResponseField name="page" type="number">
+      Current page number
+    </ResponseField>
+    
+    <ResponseField name="pageSize" type="number">
+      Items per page
+    </ResponseField>
+    
+    <ResponseField name="total" type="number">
+      Total number of matching multipliers
+    </ResponseField>
+    
+    <ResponseField name="pages" type="number">
+      Total number of pages
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash List All Active Multipliers
+curl -X GET "https://api.example.com/api/v1/multipliers?isActive=true" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash List Multipliers for Lottery
+curl -X GET "https://api.example.com/api/v1/multipliers?loteriaId=550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash List REVENTADO Multipliers
+curl -X GET "https://api.example.com/api/v1/multipliers?kind=REVENTADO" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash Search by Name
+curl -X GET "https://api.example.com/api/v1/multipliers?q=Base" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash List for Specific Sorteo
+curl -X GET "https://api.example.com/api/v1/multipliers?appliesToSorteoId=sorteo-uuid" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "multiplier-uuid-1",
+      "loteriaId": "loteria-uuid",
+      "name": "Base",
+      "valueX": 80,
+      "kind": "NUMERO",
+      "appliesToDate": null,
+      "appliesToSorteoId": null,
+      "isActive": true,
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "loteria": {
+        "id": "loteria-uuid",
+        "name": "Lotto",
+        "code": "LOTTO"
+      }
+    },
+    {
+      "id": "multiplier-uuid-2",
+      "loteriaId": "loteria-uuid",
+      "name": "REVENTADO Alto",
+      "valueX": 500,
+      "kind": "REVENTADO",
+      "appliesToDate": null,
+      "appliesToSorteoId": "sorteo-uuid",
+      "isActive": true,
+      "createdAt": "2025-02-15T00:00:00.000Z",
+      "updatedAt": "2025-02-15T00:00:00.000Z",
+      "loteria": {
+        "id": "loteria-uuid",
+        "name": "Lotto",
+        "code": "LOTTO"
+      }
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "pageSize": 20,
+    "total": 2,
+    "pages": 1
+  }
+}
+```
+
+## Common Use Cases
+
+<AccordionGroup>
+  <Accordion title="Load multipliers for lottery selection">
+    When a user selects a lottery, fetch available multipliers:
+    
+    ```javascript
+    const { data } = await fetch(
+      `/api/v1/multipliers?loteriaId=${loteriaId}&kind=NUMERO&isActive=true`
+    );
+    // Show multipliers in dropdown
+    ```
+  </Accordion>
+  
+  <Accordion title="Get REVENTADO options for sorteo evaluation">
+    When evaluating a sorteo, get available REVENTADO multipliers:
+    
+    ```javascript
+    const { data } = await fetch(
+      `/api/v1/multipliers?loteriaId=${loteriaId}&kind=REVENTADO&isActive=true`
+    );
+    // Filter further by appliesToSorteoId matching or null
+    ```
+  </Accordion>
+  
+  <Accordion title="Search for specific multiplier">
+    Find multipliers by name:
+    
+    ```bash
+    GET /api/v1/multipliers?q=REVENTADO&loteriaId=uuid
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Implementation Details
+
+From `src/api/v1/controllers/multiplier.controller.ts:32-35`:
+
+```typescript
+async list(req: AuthenticatedRequest, res: Response) {
+  const r = await MultiplierService.list(req.query);
+  return res.json({ success: true, data: r.data, meta: r.meta });
+}
+```
+
+## Related Endpoints
+
+<CardGroup cols={3}>
+  <Card title="Create Multiplier" icon="plus" href="/api/multipliers/create">
+    Create new multiplier
+  </Card>
+  <Card title="Get Multiplier" icon="eye" href="/api/multipliers/get">
+    Get single multiplier by ID
+  </Card>
+  <Card title="Update Multiplier" icon="pen" href="/api/multipliers/update">
+    Modify existing multiplier
+  </Card>
+</CardGroup>

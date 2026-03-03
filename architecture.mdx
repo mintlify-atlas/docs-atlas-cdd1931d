@@ -1,0 +1,542 @@
+---
+title: System Architecture
+description: Understanding the layered architecture, database schema, technology stack, and request flow of the Banca Management Backend
+---
+
+# System Architecture
+
+The Banca Management Backend follows a clean, layered architecture with clear separation of concerns. This design ensures maintainability, testability, and scalability as your lottery management platform grows.
+
+## Architectural Overview
+
+The system is built using a three-tier layered architecture:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   HTTP Layer                             │
+│  Express.js + Middleware (Auth, Validation, RBAC)       │
+└─────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────┐
+│                Controllers Layer                         │
+│  Handle HTTP requests, responses, and error mapping     │
+└─────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────┐
+│                 Services Layer                           │
+│  Business logic, validation, orchestration              │
+└─────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────┐
+│              Repositories Layer                          │
+│  Data access via Prisma ORM (PostgreSQL)                │
+└─────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────┐
+│                  Database Layer                          │
+│         PostgreSQL + Redis (optional cache)             │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Project Structure
+
+The codebase is organized for clarity and modularity:
+
+```bash
+src/
+├── api/
+│   └── v1/                    # API version 1
+│       ├── controllers/       # HTTP request handlers
+│       ├── dto/               # Data Transfer Objects
+│       ├── routes/            # Route definitions
+│       ├── services/          # Business logic
+│       └── validators/        # Zod schemas
+├── config/                    # Configuration files
+├── core/                      # Core modules
+│   ├── logger.ts             # Pino logger setup
+│   ├── errors.ts             # Custom error classes
+│   └── prisma.ts             # Prisma client singleton
+├── middlewares/               # Express middleware
+│   ├── auth.middleware.ts    # JWT protection
+│   ├── validate.middleware.ts # Zod validation
+│   └── rbac.middleware.ts    # Role-based access
+├── repositories/              # Data access layer
+├── utils/                     # Utility functions
+│   ├── pagination.ts         # Pagination helpers
+│   ├── transaction.ts        # Transaction retry logic
+│   └── loteriaRules.ts       # Rule resolution
+└── tests/                     # Test suites
+```
+
+## Layer Responsibilities
+
+<AccordionGroup>
+  <Accordion title="Controllers Layer" icon="server">
+    **Responsibilities:**
+    - Receive HTTP requests and extract parameters
+    - Validate request data using Zod schemas
+    - Call appropriate service methods
+    - Map service responses to HTTP responses
+    - Handle errors and return proper status codes
+    
+    **Example:**
+    ```typescript
+    // src/api/v1/controllers/ticket.controller.ts
+    class TicketController {
+      static async create(req: Request, res: Response) {
+        const ticket = await TicketService.createTicket(req.body, req.user);
+        res.status(201).json({ success: true, data: ticket });
+      }
+    }
+    ```
+    
+    Controllers are **thin** and delegate all business logic to services.
+  </Accordion>
+  
+  <Accordion title="Services Layer" icon="gears">
+    **Responsibilities:**
+    - Implement business logic and domain rules
+    - Validate business constraints
+    - Orchestrate multiple repository operations
+    - Manage transactions and retries
+    - Apply hierarchical rules (commissions, restrictions)
+    - Generate audit logs
+    
+    **Example:**
+    ```typescript
+    // src/api/v1/services/ticket.service.ts
+    class TicketService {
+      static async createTicket(data, user) {
+        return withTransactionRetry(async (tx) => {
+          // 1. Get sequential ticket number
+          // 2. Validate sorteo is OPEN
+          // 3. Apply restriction rules
+          // 4. Resolve commission policy
+          // 5. Create ticket and jugadas
+          // 6. Log to ActivityLog
+        });
+      }
+    }
+    ```
+    
+    Services contain the **core business logic** and ensure data consistency.
+  </Accordion>
+  
+  <Accordion title="Repositories Layer" icon="database">
+    **Responsibilities:**
+    - Execute database queries via Prisma
+    - Provide simple CRUD operations
+    - No business logic (pure data access)
+    - Support transactions passed from services
+    
+    **Example:**
+    ```typescript
+    // src/repositories/ticket.repository.ts
+    class TicketRepository {
+      static async create(data, tx = prisma) {
+        return tx.ticket.create({ data });
+      }
+      
+      static async findByNumber(ticketNumber, tx = prisma) {
+        return tx.ticket.findUnique({ where: { ticketNumber } });
+      }
+    }
+    ```
+    
+    Repositories are **simple** and focus solely on data persistence.
+  </Accordion>
+  
+  <Accordion title="Middlewares" icon="filter">
+    **Responsibilities:**
+    - Authentication (JWT validation)
+    - Authorization (role-based access control)
+    - Request validation (Zod schemas)
+    - Rate limiting
+    - Logging and request tracking
+    - Error handling
+    
+    **Key Middleware:**
+    - `protect` - Validates JWT and attaches user to request
+    - `validateBody` - Validates request body against Zod schema
+    - `rbacMiddleware` - Enforces role-based access rules
+    - `attachLogger` - Adds request-scoped logger
+  </Accordion>
+</AccordionGroup>
+
+## Database Schema
+
+The database follows a hierarchical structure with clear relationships:
+
+### Core Hierarchy
+
+```
+Banca (Organization)
+  ↓
+Ventana (Sales Window)
+  ↓
+Vendedor (User with VENDEDOR role)
+  ↓
+Ticket (Sale)
+  ↓
+Jugada (Bet line)
+```
+
+### Key Entities
+
+<CardGroup cols={2}>
+  <Card title="Banca" icon="building">
+    Top-level organization
+    
+    - `defaultMinBet`, `globalMaxPerNumber`
+    - `salesCutoffMinutes`
+    - `commissionPolicyJson`
+    - Soft delete support
+  </Card>
+  
+  <Card title="Ventana" icon="store">
+    Sales window/point
+    
+    - Belongs to a Banca
+    - `commissionMarginX`
+    - `commissionPolicyJson`
+    - Configuration JSON (print, theme)
+  </Card>
+  
+  <Card title="User" icon="user">
+    System users (VENDEDOR role)
+    
+    - Belongs to a Ventana (optional)
+    - Role: ADMIN, VENTANA, VENDEDOR
+    - `commissionPolicyJson`
+    - JWT refresh tokens
+  </Card>
+  
+  <Card title="Loteria" icon="ticket">
+    Lottery game definition
+    
+    - `rulesJson` (validation rules)
+    - Draw schedule configuration
+    - Multiplier settings
+    - Active/inactive state
+  </Card>
+  
+  <Card title="Sorteo" icon="calendar">
+    Individual lottery draw
+    
+    - State: SCHEDULED → OPEN → CLOSED → EVALUATED
+    - `scheduledAt`, `winningNumber`
+    - Extra multiplier support (REVENTADO)
+    - Unique constraint on (loteriaId, scheduledAt)
+  </Card>
+  
+  <Card title="Ticket" icon="receipt">
+    Sales record
+    
+    - Sequential `ticketNumber`
+    - Status: ACTIVE, PAID, CANCELLED
+    - Commission snapshots
+    - Payment tracking fields
+  </Card>
+  
+  <Card title="Jugada" icon="list">
+    Individual bet line
+    
+    - Type: NUMERO or REVENTADO
+    - `finalMultiplierX` snapshot
+    - Commission snapshot
+    - Payout calculation
+  </Card>
+  
+  <Card title="ActivityLog" icon="book">
+    Audit trail
+    
+    - Action, targetType, targetId
+    - User and context tracking
+    - JSON details
+  </Card>
+</CardGroup>
+
+### Supporting Entities
+
+- **LoteriaMultiplier** - Configurable multipliers per lottery or draw
+- **MultiplierOverride** (UserMultiplierOverride) - User-specific multipliers
+- **RestrictionRule** - Hierarchical betting limits
+- **BancaLoteriaSetting** - Banca-specific lottery configuration
+- **AccountStatement** - Financial account tracking
+- **TicketPayment** - Payment records for winning tickets
+
+<Note>
+  The schema uses UUIDs for all primary keys and includes comprehensive indexing for performance. See `prisma/schema.prisma` for the complete definition.
+</Note>
+
+## Technology Stack
+
+The backend leverages modern, production-ready technologies:
+
+### Core Technologies
+
+<CardGroup cols={2}>
+  <Card title="Runtime" icon="node">
+    **Node.js 20.x**
+    
+    LTS version with TypeScript strict mode for type safety
+  </Card>
+  
+  <Card title="Framework" icon="e">
+    **Express.js 4.x**
+    
+    Battle-tested HTTP framework with extensive middleware ecosystem
+  </Card>
+  
+  <Card title="ORM" icon="P">
+    **Prisma 6.x**
+    
+    Type-safe database access with migrations and introspection
+  </Card>
+  
+  <Card title="Database" icon="database">
+    **PostgreSQL 14+**
+    
+    Reliable relational database with transaction support
+  </Card>
+</CardGroup>
+
+### Key Dependencies
+
+| Package | Purpose | Version |
+|---------|---------|--------|
+| `@prisma/client` | Database ORM | 6.18.0 |
+| `express` | HTTP server | 4.21.2 |
+| `zod` | Schema validation | 4.1.11 |
+| `jsonwebtoken` | JWT authentication | 9.0.2 |
+| `bcryptjs` | Password hashing | 2.4.3 |
+| `pino` | Structured logging | 10.0.0 |
+| `ioredis` | Redis client (optional) | 5.8.2 |
+| `express-rate-limit` | Rate limiting | 8.1.0 |
+| `helmet` | Security headers | 8.1.0 |
+| `cors` | CORS middleware | 2.8.5 |
+| `date-fns` | Date utilities | 4.1.0 |
+
+### Development Tools
+
+- **TypeScript 5.9** - Static typing and compilation
+- **Jest 30.x** - Testing framework
+- **Supertest 7.x** - HTTP assertion library
+- **ESLint + Prettier** - Code quality and formatting
+- **Nodemon** - Development auto-reload
+- **dotenv-cli** - Environment management
+
+## Request Flow
+
+Here's how a typical authenticated request flows through the system:
+
+<Steps>
+  <Step title="HTTP Request">
+    Client sends request to `/api/v1/tickets` with JWT in Authorization header
+  </Step>
+  
+  <Step title="Middleware Pipeline">
+    Request passes through:
+    1. **CORS** - Validates origin
+    2. **Helmet** - Sets security headers
+    3. **Rate Limiter** - Checks request rate
+    4. **Body Parser** - Parses JSON body
+    5. **Logger** - Attaches request-scoped logger
+  </Step>
+  
+  <Step title="Route Matching">
+    Express router matches the route and applies route-specific middleware:
+    1. **protect** - Validates JWT, extracts user, attaches to `req.user`
+    2. **validateBody** - Validates request body against Zod schema
+    3. **rbacMiddleware** - Checks role permissions (if applicable)
+  </Step>
+  
+  <Step title="Controller Execution">
+    Controller method is called:
+    - Extracts validated data from request
+    - Calls service method with user context
+    - Awaits service response
+  </Step>
+  
+  <Step title="Service Logic">
+    Service implements business logic:
+    - Validates business rules
+    - Starts transaction (if needed)
+    - Calls repository methods
+    - Applies hierarchical rules (commissions, restrictions)
+    - Creates audit logs
+    - Commits or rolls back transaction
+  </Step>
+  
+  <Step title="Repository Access">
+    Repository executes database operations:
+    - Uses Prisma Client for type-safe queries
+    - Participates in transaction (if provided)
+    - Returns raw data entities
+  </Step>
+  
+  <Step title="Response">
+    Controller formats response:
+    ```json
+    {
+      "success": true,
+      "data": { /* entity */ },
+      "meta": { /* pagination, etc */ }
+    }
+    ```
+  </Step>
+  
+  <Step title="Error Handling">
+    If error occurs at any step:
+    - Custom error classes bubble up
+    - Global error handler catches and formats
+    - Appropriate HTTP status code returned
+    - Error logged with context
+  </Step>
+</Steps>
+
+## Caching Strategy
+
+The system supports optional Redis caching for performance optimization:
+
+### Cached Data
+
+- **Sales cutoff rules** - TTL: 300s (`CACHE_TTL_CUTOFF`)
+- **Restriction rules** - TTL: 300s (`CACHE_TTL_RESTRICTIONS`)
+- **Lottery rules** - Invalidated on update
+
+### Cache Configuration
+
+```bash
+CACHE_ENABLED=true
+REDIS_URL=redis://localhost:6379
+CACHE_TTL_CUTOFF=300
+CACHE_TTL_RESTRICTIONS=300
+```
+
+<Info>
+  If `CACHE_ENABLED=false`, the system operates without caching and queries the database directly for all requests.
+</Info>
+
+## Concurrency and Transaction Safety
+
+The system is designed to handle high-concurrency scenarios safely:
+
+### Transaction Retry Wrapper
+
+```typescript
+// src/utils/transaction.ts
+await withTransactionRetry(async (tx) => {
+  // All operations use 'tx' instead of 'prisma'
+  // Automatic retry on deadlock (P2034)
+  // Exponential backoff between retries
+  // Structured logging per attempt
+});
+```
+
+**Features:**
+- Handles PostgreSQL deadlocks automatically
+- Configurable max retries (`TX_MAX_RETRIES`)
+- Exponential backoff (`TX_BACKOFF_MIN_MS` to `TX_BACKOFF_MAX_MS`)
+- Detailed logging of retry attempts
+- Prevents overselling in concurrent ticket creation
+
+### Atomic Operations
+
+- **Ticket number generation** - Sequential via database function or atomic counter
+- **Sorteo deduplication** - Unique constraint on `(loteriaId, scheduledAt)`
+- **Commission snapshots** - Immutable at time of sale
+- **State transitions** - Validated within transactions
+
+## Performance Features
+
+<CardGroup cols={2}>
+  <Card title="Database Pooling" icon="water">
+    Supabase transaction pooler (port 6543) for web requests with connection limits
+  </Card>
+  
+  <Card title="Read Replicas" icon="copy">
+    Optional `DATABASE_URL_REPLICA` for analytics and dashboard queries
+  </Card>
+  
+  <Card title="Indexed Queries" icon="magnifying-glass">
+    Comprehensive indexing on frequently queried fields (ticketNumber, dates, status)
+  </Card>
+  
+  <Card title="Pagination" icon="list">
+    Cursor and offset-based pagination for large result sets
+  </Card>
+  
+  <Card title="Query Optimization" icon="gauge-high">
+    Selective field loading, eager loading of relations, and query profiling
+  </Card>
+  
+  <Card title="Redis Caching" icon="bolt">
+    Optional caching layer for frequently accessed configuration data
+  </Card>
+</CardGroup>
+
+## Security Features
+
+<Steps>
+  <Step title="Authentication">
+    JWT-based with access and refresh tokens. Tokens include userId, role, and ventanaId claims.
+  </Step>
+  
+  <Step title="Authorization">
+    Role-based access control (RBAC) with hierarchical permissions:
+    - **ADMIN** - Full system access
+    - **VENTANA** - Access to own ventana and vendedores
+    - **VENDEDOR** - Access to own tickets and data
+  </Step>
+  
+  <Step title="Input Validation">
+    All inputs validated with Zod schemas before processing. Type-safe at compile time.
+  </Step>
+  
+  <Step title="Rate Limiting">
+    express-rate-limit prevents abuse. Configurable per-route limits.
+  </Step>
+  
+  <Step title="Security Headers">
+    Helmet middleware sets CSP, HSTS, X-Frame-Options, etc.
+  </Step>
+  
+  <Step title="Password Hashing">
+    bcryptjs with salt rounds for secure password storage.
+  </Step>
+  
+  <Step title="SQL Injection Prevention">
+    Prisma ORM parameterizes all queries automatically.
+  </Step>
+  
+  <Step title="Audit Logging">
+    All sensitive operations logged to ActivityLog with user context.
+  </Step>
+</Steps>
+
+## Scalability Considerations
+
+### Horizontal Scaling
+
+- **Stateless design** - No session state stored in-memory
+- **JWT tokens** - No server-side session storage required
+- **Database pooling** - Connection pools managed by Supabase
+- **Redis cache** - Shared cache layer across instances
+
+### Vertical Scaling
+
+- **Efficient queries** - Indexed and optimized for performance
+- **Transaction batching** - Multiple operations in single transaction
+- **Lazy loading** - Relations loaded only when needed
+
+### Monitoring
+
+- **Structured logging** - JSON logs with context for analysis
+- **Performance metrics** - Query execution time tracking
+- **Error tracking** - Sentry integration for production monitoring
+- **Database metrics** - Prisma query logging and slow query detection
+
+<Info>
+  For production deployment best practices, see the deployment guide or contact [mquirosp78@gmail.com](mailto:mquirosp78@gmail.com).
+</Info>

@@ -1,0 +1,171 @@
+---
+title: 'Update Banca'
+api: 'PATCH /api/v1/bancas/:id'
+description: 'Update an existing banca. Only accessible by ADMIN role.'
+---
+
+## Overview
+
+Updates an existing banca. All fields are optional - only provided fields will be updated.
+
+## Authorization
+
+<Info>**Required role:** ADMIN</Info>
+
+This endpoint requires:
+- Valid JWT token in Authorization header
+- User must have ADMIN role
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the banca to update
+</ParamField>
+
+## Request Body
+
+<ParamField body="name" type="string">
+  Banca name (2-100 characters, must be unique)
+</ParamField>
+
+<ParamField body="code" type="string">
+  Unique banca code (2-20 characters, must be unique)
+</ParamField>
+
+<ParamField body="email" type="string">
+  Contact email address (must be valid email format)
+</ParamField>
+
+<ParamField body="address" type="string">
+  Physical address (max 200 characters)
+</ParamField>
+
+<ParamField body="phone" type="string">
+  Contact phone number (max 20 characters)
+</ParamField>
+
+<ParamField body="isActive" type="boolean">
+  Whether the banca is active
+</ParamField>
+
+<ParamField body="defaultMinBet" type="number">
+  Minimum bet amount (must be positive, min 1)
+</ParamField>
+
+<ParamField body="globalMaxPerNumber" type="number">
+  Global maximum amount per number (must be positive, min 1)
+</ParamField>
+
+<ParamField body="salesCutoffMinutes" type="number">
+  Minutes before sorteo to cut off sales (must be positive integer)
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The updated banca object
+  
+  <Expandable title="Banca object">
+    <ResponseField name="id" type="string">
+      UUID of the banca
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Banca name
+    </ResponseField>
+    
+    <ResponseField name="code" type="string">
+      Unique banca code
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Contact email
+    </ResponseField>
+    
+    <ResponseField name="address" type="string">
+      Physical address
+    </ResponseField>
+    
+    <ResponseField name="phone" type="string">
+      Contact phone
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Active status
+    </ResponseField>
+    
+    <ResponseField name="defaultMinBet" type="number">
+      Default minimum bet
+    </ResponseField>
+    
+    <ResponseField name="globalMaxPerNumber" type="number">
+      Global max per number
+    </ResponseField>
+    
+    <ResponseField name="salesCutoffMinutes" type="number">
+      Sales cutoff time in minutes
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp (updated)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Banca Central Updated",
+    "code": "BC001",
+    "email": "newemail@bancacentral.com",
+    "address": "456 New Address",
+    "phone": "+1-234-567-8901",
+    "isActive": true,
+    "defaultMinBet": 150,
+    "globalMaxPerNumber": 7500,
+    "salesCutoffMinutes": 2,
+    "createdAt": "2024-03-15T10:30:00Z",
+    "updatedAt": "2024-03-15T14:20:00Z"
+  }
+}
+```
+
+```json 404 - Not Found
+{
+  "success": false,
+  "error": "Not Found",
+  "message": "Banca not found"
+}
+```
+
+```json 403 - Forbidden
+{
+  "success": false,
+  "error": "Forbidden",
+  "message": "Only ADMIN users can update bancas"
+}
+```
+
+```json 409 - Conflict
+{
+  "success": false,
+  "error": "Conflict",
+  "message": "Banca with this code already exists"
+}
+```
+</ResponseExample>
+
+## Notes
+
+- Both PATCH and PUT methods are supported (same behavior)
+- Only provided fields are updated (partial update)
+- Name and code uniqueness is validated
+- Activity is logged for audit purposes (see src/api/v1/controllers/banca.controller.ts:13)
+- Routes defined in src/api/v1/routes/banca.routes.ts:29-35

@@ -1,0 +1,405 @@
+---
+title: Evaluate Sorteo
+description: Set the winning number and evaluate all tickets for winners
+---
+
+## PATCH /api/v1/sorteos/:id/evaluate
+
+Evaluates a sorteo by setting the winning number and automatically determining winning tickets. This operation processes all active tickets and calculates payouts.
+
+<Warning>
+  Evaluation is a **critical operation** that affects financial calculations and payouts. It runs in a transaction with a 3-minute timeout to handle sorteos with many tickets.
+</Warning>
+
+### Authentication
+
+Requires **ADMIN** role.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the sorteo to evaluate
+</ParamField>
+
+### Request Body
+
+<ParamField body="winningNumber" type="string" required>
+  The winning number for this sorteo.
+  
+  - Must be numeric (1-3 digits)
+  - Length must match the sorteo's `digits` configuration
+  - For 2-digit sorteos: "00" to "99"
+  - For 3-digit sorteos: "000" to "999"
+  
+  Examples: `"42"`, `"07"`, `"123"`
+</ParamField>
+
+<ParamField body="extraMultiplierId" type="string" nullable>
+  UUID of the REVENTADO multiplier that applies to this draw.
+  
+  Only required if a REVENTADO outcome occurred. Must be:
+  - A valid LoteriaMultiplier UUID
+  - Type: `REVENTADO`
+  - Belonging to the same loteria
+  - Active
+  
+  Example: `"a1b2c3d4-e5f6-4a5b-9c8d-1e2f3a4b5c6d"`
+</ParamField>
+
+<ParamField body="extraOutcomeCode" type="string" nullable>
+  Optional label for the extra multiplier outcome.
+  
+  Typically the multiplier's name. Used for display and reporting.
+  
+  Examples: `"REVENTADO x5"`, `"Triple Pago"`
+  
+  Max: 50 characters
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the operation was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The evaluated sorteo object with winner information
+  
+  <Expandable title="Additional Fields">
+    <ResponseField name="syncWarning" type="string" nullable>
+      Warning message if account statement sync failed (evaluation still succeeded)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Request (Simple)
+
+```bash
+curl -X PATCH https://api.example.com/api/v1/sorteos/7c9e6679-7425-40de-944b-e07fc1f90ae7/evaluate \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "winningNumber": "42"
+  }'
+```
+
+### Example Request (With REVENTADO)
+
+```bash
+curl -X PATCH https://api.example.com/api/v1/sorteos/7c9e6679-7425-40de-944b-e07fc1f90ae7/evaluate \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "winningNumber": "42",
+    "extraMultiplierId": "a1b2c3d4-e5f6-4a5b-9c8d-1e2f3a4b5c6d",
+    "extraOutcomeCode": "REVENTADO x5"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "loteriaId": "550e8400-e29b-41d4-a716-446655440000",
+    "scheduledAt": "2025-03-03T12:55:00-06:00",
+    "name": "Lotto 12:55 PM",
+    "status": "EVALUATED",
+    "digits": 2,
+    "isActive": true,
+    "reventadoEnabled": true,
+    "winningNumber": "42",
+    "hasWinner": true,
+    "extraMultiplierId": "a1b2c3d4-e5f6-4a5b-9c8d-1e2f3a4b5c6d",
+    "extraMultiplierX": 5,
+    "extraOutcomeCode": "REVENTADO x5",
+    "createdAt": "2025-03-03T10:00:00-06:00",
+    "updatedAt": "2025-03-03T13:10:00-06:00"
+  }
+}
+```
+
+### Error Responses
+
+<ResponseExample>
+```json Not Open
+{
+  "success": false,
+  "error": "Solo se puede evaluar desde OPEN"
+}
+```
+
+```json Invalid Digits
+{
+  "success": false,
+  "error": "El número ganador debe tener 2 dígitos (recibido: 3)"
+}
+```
+
+```json Invalid Multiplier
+{
+  "success": false,
+  "error": "extraMultiplierId no pertenece a la lotería del sorteo"
+}
+```
+
+```json Already Evaluated
+{
+  "success": false,
+  "error": "Solo se puede evaluar desde OPEN"
+}
+```
+</ResponseExample>
+
+## Evaluation Process
+
+The evaluation runs in a single database transaction with the following steps:
+
+<Steps>
+  <Step title="Update Sorteo">
+    Set `status: EVALUATED`, store `winningNumber`, `extraMultiplierId`, `extraMultiplierX`, and `extraOutcomeCode`.
+  </Step>
+  
+  <Step title="Mark NUMERO Winners">
+    Find all NUMERO bets matching the winning number and mark them as winners.
+    
+    ```sql
+    UPDATE "Jugada" j
+    SET "isWinner" = true,
+        "payout" = j."amount" * j."finalMultiplierX"
+    WHERE j."number" = winningNumber
+      AND j."type" = 'NUMERO'
+      AND ticket is active and not cancelled
+    ```
+  </Step>
+  
+  <Step title="Mark REVENTADO Winners (if applicable)">
+    If `extraMultiplierId` provided, find all REVENTADO bets matching the winning number.
+    
+    ```sql
+    UPDATE "Jugada" j
+    SET "isWinner" = true,
+        "finalMultiplierX" = extraMultiplierX,
+        "payout" = j."amount" * extraMultiplierX
+    WHERE j."reventadoNumber" = winningNumber
+      AND j."type" = 'REVENTADO'
+      AND ticket is active and not cancelled
+    ```
+  </Step>
+  
+  <Step title="Mark All Tickets as Evaluated">
+    Set all active tickets to `status: EVALUATED` and `isWinner: false` (base state).
+  </Step>
+  
+  <Step title="Calculate Ticket Payouts">
+    For tickets with winning jugadas, calculate total payout and set `isWinner: true`.
+    
+    ```sql
+    UPDATE "Ticket" t
+    SET "isWinner" = true,
+        "totalPayout" = SUM(jugadas.payout),
+        "remainingAmount" = SUM(jugadas.payout)
+    WHERE ticket has winning jugadas
+    ```
+  </Step>
+  
+  <Step title="Update hasWinner Flag">
+    Set sorteo `hasWinner: true` if any tickets won.
+  </Step>
+  
+  <Step title="Sync Account Statements">
+    Update account statements for affected dates (vendedores' daily totals).
+  </Step>
+</Steps>
+
+## REVENTADO Evaluation
+
+<Info>
+  **REVENTADO** is an extra multiplier feature that applies additional payouts to specific number bets.
+</Info>
+
+How REVENTADO works:
+
+<Tabs>
+  <Tab title="No REVENTADO">
+    **Standard Evaluation**
+    
+    Only NUMERO bets are evaluated:
+    
+    ```json
+    {
+      "winningNumber": "42"
+    }
+    ```
+    
+    Result:
+    - NUMERO bets on "42" win with normal multiplier
+    - REVENTADO bets on "42" **do not win**
+  </Tab>
+  
+  <Tab title="With REVENTADO">
+    **REVENTADO Evaluation**
+    
+    Both NUMERO and REVENTADO bets are evaluated:
+    
+    ```json
+    {
+      "winningNumber": "42",
+      "extraMultiplierId": "reventado-uuid",
+      "extraOutcomeCode": "REVENTADO x5"
+    }
+    ```
+    
+    Result:
+    - NUMERO bets on "42" win with normal multiplier (e.g., 75x)
+    - REVENTADO bets on "42" win with extra multiplier (e.g., 5x)
+  </Tab>
+</Tabs>
+
+### Example Scenario
+
+Ticket with both bet types:
+
+```json
+{
+  "ticketId": "ticket-123",
+  "jugadas": [
+    {
+      "type": "NUMERO",
+      "number": "42",
+      "amount": 1000,
+      "finalMultiplierX": 75
+    },
+    {
+      "type": "REVENTADO",
+      "reventadoNumber": "42",
+      "amount": 500,
+      "finalMultiplierX": 1
+    }
+  ]
+}
+```
+
+**Evaluation with REVENTADO x5:**
+
+```json
+{
+  "winningNumber": "42",
+  "extraMultiplierId": "reventado-5x-uuid"
+}
+```
+
+**Result:**
+
+- NUMERO bet wins: 1000 × 75 = ₡75,000
+- REVENTADO bet wins: 500 × 5 = ₡2,500
+- **Total payout**: ₡77,500
+
+## Excluding Tickets from Evaluation
+
+<Info>
+  Tickets can be excluded from evaluation using the [Sorteo Listas Exclusion](/api/sorteos/listas) system.
+</Info>
+
+Excluded tickets:
+- Are **not evaluated** for winners
+- Remain in their current state
+- Are not counted in winner statistics
+
+Use cases:
+- Dispute resolution
+- Manual corrections
+- Testing
+
+## Account Statement Sync
+
+<Warning>
+  After evaluation, account statements are automatically synchronized to update vendedor daily totals.
+</Warning>
+
+What gets updated:
+- `totalPayouts`: Sum of winning ticket payouts for the day
+- `accumulatedBalance`: Running balance including new payouts
+
+If sync fails:
+- Evaluation still succeeds (transaction commits)
+- A `syncWarning` is included in the response
+- Manual sync can be triggered via account statement sync endpoint
+
+## Validation Rules
+
+<AccordionGroup>
+  <Accordion title="Winning Number Validation" icon="check">
+    - Must be numeric string
+    - Must match sorteo's `digits` length
+    - For 2 digits: "00" to "99" (with leading zeros)
+    - For 3 digits: "000" to "999" (with leading zeros)
+  </Accordion>
+  
+  <Accordion title="Extra Multiplier Validation" icon="xmark">
+    If `extraMultiplierId` is provided:
+    - Must be a valid UUID
+    - Must exist in database
+    - Must be active (`isActive: true`)
+    - Must belong to the same loteria
+    - Must be of kind `REVENTADO`
+    - If `appliesToSorteoId` is set, must match this sorteo
+  </Accordion>
+  
+  <Accordion title="State Validation" icon="door-open">
+    - Sorteo must be in `OPEN` status
+    - Cannot evaluate `SCHEDULED`, `EVALUATED`, or `CLOSED` sorteos
+    - Use [Revert Evaluation](/api/sorteos/revert-evaluation) to re-evaluate
+  </Accordion>
+</AccordionGroup>
+
+## Performance Considerations
+
+<Info>
+  Evaluation uses raw SQL queries for performance when processing large numbers of tickets and jugadas.
+</Info>
+
+Optimizations:
+- Bulk updates via raw SQL (no ORM overhead)
+- Single transaction (ACID compliance)
+- 3-minute timeout for sorteos with many tickets
+- Indexed queries on sorteo, ticket, and jugada tables
+
+## Activity Logging
+
+Evaluation creates detailed activity logs:
+
+```json
+{
+  "action": "SORTEO_EVALUATE",
+  "targetType": "SORTEO",
+  "targetId": "sorteo-uuid",
+  "details": {
+    "winningNumber": "42",
+    "extraMultiplierId": "reventado-uuid",
+    "extraMultiplierX": 5,
+    "extraOutcomeCode": "REVENTADO x5",
+    "winners": 23,
+    "description": "Sorteo Lotto 12:55 PM EVALUADO. Número ganador: 42 (REVENTADO x5). Ganadores: 23"
+  }
+}
+```
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Revert Evaluation" icon="rotate-left" href="/api/sorteos/revert-evaluation">
+    Undo evaluation and reopen sorteo
+  </Card>
+  <Card title="Close Sorteo" icon="lock" href="/api/sorteos/close">
+    Close after evaluation
+  </Card>
+  <Card title="Pay Ticket" icon="money-bill" href="/api/payments/pay-ticket">
+    Pay winning tickets
+  </Card>
+  <Card title="Multipliers" icon="xmark" href="/concepts/multipliers">
+    Understand multiplier system
+  </Card>
+</CardGroup>

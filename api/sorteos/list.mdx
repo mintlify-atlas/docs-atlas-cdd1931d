@@ -1,0 +1,385 @@
+---
+title: List Sorteos
+description: Get a paginated list of lottery draws with filtering, search, and grouping options
+---
+
+## GET /api/v1/sorteos
+
+Retrieves a list of sorteos (lottery draws) with support for pagination, filtering, and grouping.
+
+<Info>
+  For **VENDEDOR** role, results are automatically filtered based on their commission policy. Only sorteos with applicable commission rules are shown.
+</Info>
+
+### Authentication
+
+Requires authentication. Available to all roles with different access levels:
+
+- **ADMIN**: See all sorteos
+- **VENTANA**: See all sorteos
+- **VENDEDOR**: See only sorteos matching their commission policy
+
+### Query Parameters
+
+<ParamField query="page" type="integer" default="1">
+  Page number for pagination (min: 1)
+</ParamField>
+
+<ParamField query="pageSize" type="integer" default="10">
+  Number of items per page (min: 1, max: 100)
+</ParamField>
+
+<ParamField query="loteriaId" type="string">
+  Filter by loteria UUID. Returns only sorteos for the specified loteria.
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by sorteo status.
+  
+  Values: `SCHEDULED`, `OPEN`, `EVALUATED`, `CLOSED`
+</ParamField>
+
+<ParamField query="isActive" type="boolean">
+  Filter by active status.
+  
+  - `true`: Show only active sorteos
+  - `false`: Show only inactive sorteos
+  - Omit: Show all sorteos
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search by sorteo name or winning number (min: 1, max: 100 characters)
+</ParamField>
+
+<ParamField query="date" type="string">
+  Preset date range filter.
+  
+  Values: `today`, `yesterday`, `week`, `month`, `year`, `range`
+  
+  When using `range`, also provide `fromDate` and `toDate`.
+</ParamField>
+
+<ParamField query="fromDate" type="string">
+  Start date for custom range filter (format: `YYYY-MM-DD`)
+  
+  Example: `2025-03-01`
+</ParamField>
+
+<ParamField query="toDate" type="string">
+  End date for custom range filter (format: `YYYY-MM-DD`)
+  
+  Example: `2025-03-31`
+</ParamField>
+
+<ParamField query="groupBy" type="string">
+  Group sorteos by specific criteria.
+  
+  Values:
+  - `hour`: Group by scheduled hour only
+  - `loteria-hour`: Group by loteria + scheduled hour
+  
+  When grouping is active, pagination is disabled.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the operation was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of sorteo objects
+  
+  <Expandable title="Sorteo Object">
+    <ResponseField name="id" type="string">
+      UUID of the sorteo
+    </ResponseField>
+    
+    <ResponseField name="loteriaId" type="string">
+      UUID of the associated loteria
+    </ResponseField>
+    
+    <ResponseField name="scheduledAt" type="string">
+      ISO 8601 datetime in Costa Rica timezone
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Display name of the sorteo
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Current status: `SCHEDULED`, `OPEN`, `EVALUATED`, or `CLOSED`
+    </ResponseField>
+    
+    <ResponseField name="digits" type="integer">
+      Number of digits (2 or 3)
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Whether the sorteo is active
+    </ResponseField>
+    
+    <ResponseField name="reventadoEnabled" type="boolean">
+      Whether REVENTADO multiplier is enabled
+    </ResponseField>
+    
+    <ResponseField name="winningNumber" type="string" nullable>
+      Winning number (null if not evaluated)
+    </ResponseField>
+    
+    <ResponseField name="hasWinner" type="boolean">
+      Whether there are winning tickets
+    </ResponseField>
+    
+    <ResponseField name="loteria" type="object">
+      Associated loteria details
+      
+      <Expandable title="Loteria Details">
+        <ResponseField name="id" type="string">
+          Loteria UUID
+        </ResponseField>
+        
+        <ResponseField name="name" type="string">
+          Loteria name
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Pagination metadata
+  
+  <Expandable title="Meta Object">
+    <ResponseField name="total" type="integer">
+      Total number of sorteos matching filters
+    </ResponseField>
+    
+    <ResponseField name="page" type="integer">
+      Current page number (only in non-grouped mode)
+    </ResponseField>
+    
+    <ResponseField name="pageSize" type="integer">
+      Items per page (only in non-grouped mode)
+    </ResponseField>
+    
+    <ResponseField name="totalPages" type="integer">
+      Total number of pages (only in non-grouped mode)
+    </ResponseField>
+    
+    <ResponseField name="hasNextPage" type="boolean">
+      Whether there are more pages (only in non-grouped mode)
+    </ResponseField>
+    
+    <ResponseField name="hasPrevPage" type="boolean">
+      Whether there are previous pages (only in non-grouped mode)
+    </ResponseField>
+    
+    <ResponseField name="grouped" type="boolean">
+      Whether results are grouped
+    </ResponseField>
+    
+    <ResponseField name="groupBy" type="string" nullable>
+      Grouping mode if active
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl "https://api.example.com/api/v1/sorteos?page=1&pageSize=20&status=OPEN&date=today" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response (Paginated)
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "loteriaId": "550e8400-e29b-41d4-a716-446655440000",
+      "scheduledAt": "2025-03-03T12:55:00-06:00",
+      "name": "Lotto 12:55 PM",
+      "status": "OPEN",
+      "digits": 2,
+      "isActive": true,
+      "reventadoEnabled": true,
+      "winningNumber": null,
+      "hasWinner": false,
+      "loteria": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "name": "Lotto"
+      }
+    }
+  ],
+  "meta": {
+    "total": 45,
+    "page": 1,
+    "pageSize": 20,
+    "totalPages": 3,
+    "hasNextPage": true,
+    "hasPrevPage": false,
+    "grouped": false,
+    "groupBy": null
+  }
+}
+```
+
+### Example Response (Grouped by Hour)
+
+```bash
+curl "https://api.example.com/api/v1/sorteos?groupBy=hour&date=today" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "hour": "12:55 PM",
+      "hour24": "12:55",
+      "sorteoIds": [
+        "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        "8d9e6679-7425-40de-944b-e07fc1f90ae8"
+      ],
+      "count": 2,
+      "mostRecentSorteoId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "mostRecentDate": "2025-03-03"
+    },
+    {
+      "hour": "6:55 PM",
+      "hour24": "18:55",
+      "sorteoIds": [
+        "9e9e6679-7425-40de-944b-e07fc1f90ae9"
+      ],
+      "count": 1,
+      "mostRecentSorteoId": "9e9e6679-7425-40de-944b-e07fc1f90ae9",
+      "mostRecentDate": "2025-03-03"
+    }
+  ],
+  "meta": {
+    "total": 2,
+    "grouped": true,
+    "groupBy": "hour",
+    "fromDate": "2025-03-03",
+    "toDate": "2025-03-03"
+  }
+}
+```
+
+### Example Response (Grouped by Loteria + Hour)
+
+```bash
+curl "https://api.example.com/api/v1/sorteos?groupBy=loteria-hour&date=week" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "loteriaId": "550e8400-e29b-41d4-a716-446655440000",
+      "loteriaName": "Lotto",
+      "hour": "12:55 PM",
+      "hour24": "12:55",
+      "sorteoIds": [
+        "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        "8d9e6679-7425-40de-944b-e07fc1f90ae8"
+      ],
+      "count": 7,
+      "mostRecentSorteoId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "mostRecentDate": "2025-03-03"
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "grouped": true,
+    "groupBy": "loteria-hour",
+    "fromDate": "2025-02-24",
+    "toDate": "2025-03-03"
+  }
+}
+```
+
+## Commission Policy Filtering (VENDEDOR)
+
+<Warning>
+  For **VENDEDOR** users, sorteos are automatically filtered based on their commission policy. Only sorteos with at least one active multiplier that has a specific commission rule are shown.
+</Warning>
+
+The filtering logic:
+
+1. Retrieves the vendedor's commission policy
+2. Gets all active multipliers for each sorteo's loteria
+3. Checks if any multiplier has a specific commission rule (not just `defaultPercent`)
+4. Only shows sorteos where at least one multiplier matches a commission rule
+
+This ensures vendedores only see sorteos they can earn commission on.
+
+## Date Range Presets
+
+<CodeGroup>
+```bash Today
+curl "https://api.example.com/api/v1/sorteos?date=today"
+```
+
+```bash Yesterday
+curl "https://api.example.com/api/v1/sorteos?date=yesterday"
+```
+
+```bash This Week
+curl "https://api.example.com/api/v1/sorteos?date=week"
+```
+
+```bash This Month
+curl "https://api.example.com/api/v1/sorteos?date=month"
+```
+
+```bash This Year
+curl "https://api.example.com/api/v1/sorteos?date=year"
+```
+
+```bash Custom Range
+curl "https://api.example.com/api/v1/sorteos?date=range&fromDate=2025-03-01&toDate=2025-03-31"
+```
+</CodeGroup>
+
+## Grouping Modes
+
+### Group by Hour
+
+Groups sorteos by their scheduled hour, useful for displaying all loterias at the same time:
+
+```bash
+curl "https://api.example.com/api/v1/sorteos?groupBy=hour&date=today"
+```
+
+### Group by Loteria + Hour
+
+Groups sorteos by both loteria and hour, useful for showing recurring schedules:
+
+```bash
+curl "https://api.example.com/api/v1/sorteos?groupBy=loteria-hour&loteriaId=550e8400-e29b-41d4-a716-446655440000"
+```
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Get Sorteo" icon="file" href="/api/sorteos/get">
+    Get a single sorteo by ID
+  </Card>
+  <Card title="Create Sorteo" icon="plus" href="/api/sorteos/create">
+    Create a new sorteo
+  </Card>
+  <Card title="Filter by Loteria" icon="filter" href="/api/loterias/get">
+    Get loteria details
+  </Card>
+  <Card title="Commission Policy" icon="percent" href="/concepts/commission-system">
+    Understand commission filtering
+  </Card>
+</CardGroup>

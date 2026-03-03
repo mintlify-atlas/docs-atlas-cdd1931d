@@ -1,0 +1,240 @@
+---
+title: Create Sorteo
+description: Create a new lottery draw (sorteo) with scheduling and configuration
+---
+
+## POST /api/v1/sorteos
+
+Creates a new sorteo (lottery draw) for a specific loteria. The sorteo will be created in `SCHEDULED` status by default.
+
+<Info>
+  Sorteos can be created manually or automatically via the [seed sorteos](/api/loterias/seed-sorteos) endpoint.
+</Info>
+
+### Authentication
+
+<Warning>
+  Requires **ADMIN** role. Vendedores and regular users cannot create sorteos.
+</Warning>
+
+### Request Body
+
+<ParamField body="loteriaId" type="string" required>
+  UUID of the loteria this sorteo belongs to. The loteria must be active.
+</ParamField>
+
+<ParamField body="scheduledAt" type="string" required>
+  ISO 8601 datetime when the sorteo is scheduled to run. Must be in **Costa Rica timezone** (GMT-6).
+  
+  Example: `"2025-03-03T12:55:00-06:00"` (12:55 PM Costa Rica time)
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Display name for the sorteo. Typically includes the loteria name and time.
+  
+  Examples: `"Lotto 12:55 PM"`, `"Tica 6:55 PM"`
+  
+  Min: 1 character, Max: 100 characters
+</ParamField>
+
+<ParamField body="digits" type="integer" default="Inherited from loteria">
+  Number of digits for winning numbers (2 or 3).
+  
+  - **2 digits**: Times/Tiempos lotteries (00-99)
+  - **3 digits**: Monazos lotteries (000-999)
+  
+  If not provided, inherits from the loteria's `rulesJson.digits` configuration.
+</ParamField>
+
+<ParamField body="isActive" type="boolean" default="true">
+  Whether the sorteo is active and available for ticket sales.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the operation was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The created sorteo object
+  
+  <Expandable title="Sorteo Object">
+    <ResponseField name="id" type="string">
+      UUID of the sorteo
+    </ResponseField>
+    
+    <ResponseField name="loteriaId" type="string">
+      UUID of the associated loteria
+    </ResponseField>
+    
+    <ResponseField name="scheduledAt" type="string">
+      ISO 8601 datetime in Costa Rica timezone format
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Display name of the sorteo
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Current status: `SCHEDULED`, `OPEN`, `EVALUATED`, or `CLOSED`
+    </ResponseField>
+    
+    <ResponseField name="digits" type="integer">
+      Number of digits for winning numbers (2 or 3)
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Whether the sorteo is active
+    </ResponseField>
+    
+    <ResponseField name="reventadoEnabled" type="boolean">
+      Whether REVENTADO (extra multiplier) is enabled for this sorteo
+    </ResponseField>
+    
+    <ResponseField name="winningNumber" type="string" nullable>
+      Winning number (null until evaluated)
+    </ResponseField>
+    
+    <ResponseField name="hasWinner" type="boolean">
+      Whether there are any winning tickets
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of creation
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST https://api.example.com/api/v1/sorteos \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "loteriaId": "550e8400-e29b-41d4-a716-446655440000",
+    "scheduledAt": "2025-03-03T12:55:00-06:00",
+    "name": "Lotto 12:55 PM",
+    "digits": 2,
+    "isActive": true
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "loteriaId": "550e8400-e29b-41d4-a716-446655440000",
+    "scheduledAt": "2025-03-03T12:55:00-06:00",
+    "name": "Lotto 12:55 PM",
+    "status": "SCHEDULED",
+    "digits": 2,
+    "isActive": true,
+    "reventadoEnabled": true,
+    "winningNumber": null,
+    "hasWinner": false,
+    "createdAt": "2025-03-03T10:00:00-06:00",
+    "updatedAt": "2025-03-03T10:00:00-06:00"
+  }
+}
+```
+
+### Error Responses
+
+<ResponseExample>
+```json Loteria Not Found
+{
+  "success": false,
+  "error": "Lotería no encontrada"
+}
+```
+
+```json Invalid Digits
+{
+  "success": false,
+  "error": "digits debe ser 2 o 3"
+}
+```
+
+```json Duplicate Sorteo
+{
+  "success": false,
+  "error": "Ya existe un sorteo para esta lotería en este horario"
+}
+```
+</ResponseExample>
+
+## Sorteo Lifecycle
+
+After creation, a sorteo goes through the following states:
+
+<Steps>
+  <Step title="SCHEDULED">
+    Initial state. Sorteo is created and waiting to be opened for sales.
+  </Step>
+  
+  <Step title="OPEN">
+    Sorteo is accepting ticket sales. Can be opened manually or automatically.
+  </Step>
+  
+  <Step title="EVALUATED">
+    Winning number has been set and tickets have been evaluated for winners.
+  </Step>
+  
+  <Step title="CLOSED">
+    Sorteo is closed. No more operations allowed (terminal state).
+  </Step>
+</Steps>
+
+## Digits Configuration
+
+The `digits` field determines the valid range of numbers:
+
+<CodeGroup>
+```json 2 Digits (Times)
+{
+  "digits": 2,
+  "validNumbers": "00-99"
+}
+```
+
+```json 3 Digits (Monazos)
+{
+  "digits": 3,
+  "validNumbers": "000-999"
+}
+```
+</CodeGroup>
+
+## Timezone Handling
+
+<Warning>
+  All sorteo times are in **Costa Rica timezone (GMT-6)**. The system automatically handles UTC conversion for storage.
+</Warning>
+
+See [Timezone Handling](/concepts/timezone-handling) for details.
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="List Sorteos" icon="list" href="/api/sorteos/list">
+    Get all sorteos with filtering
+  </Card>
+  <Card title="Open Sorteo" icon="door-open" href="/api/sorteos/open">
+    Open a sorteo for ticket sales
+  </Card>
+  <Card title="Evaluate Sorteo" icon="calculator" href="/api/sorteos/evaluate">
+    Set winning number and evaluate tickets
+  </Card>
+  <Card title="Seed Sorteos" icon="seedling" href="/api/loterias/seed-sorteos">
+    Auto-generate sorteos from schedule
+  </Card>
+</CardGroup>

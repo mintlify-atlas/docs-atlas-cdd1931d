@@ -1,0 +1,163 @@
+---
+title: 'List Ventanas'
+api: 'GET /api/v1/ventanas'
+description: 'Retrieve a paginated list of ventanas. Accessible by all authenticated users.'
+---
+
+## Overview
+
+Retrieves a paginated list of ventanas (betting windows) with optional filtering.
+
+## Authorization
+
+<Info>**Required:** Valid JWT token (all authenticated users)</Info>
+
+## Query Parameters
+
+<ParamField query="page" type="number" default="1">
+  Page number (must be positive integer)
+</ParamField>
+
+<ParamField query="pageSize" type="number" default="20">
+  Number of items per page (1-100)
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search term to filter ventanas (1-100 characters). Searches across name, code, email, phone, and address fields.
+</ParamField>
+
+<ParamField query="isActive" type="boolean">
+  Filter by active status
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of ventana objects
+  
+  <Expandable title="Ventana object">
+    <ResponseField name="id" type="string">
+      UUID of the ventana
+    </ResponseField>
+    
+    <ResponseField name="bancaId" type="string">
+      Parent banca UUID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Ventana name
+    </ResponseField>
+    
+    <ResponseField name="code" type="string">
+      Unique ventana code
+    </ResponseField>
+    
+    <ResponseField name="commissionMarginX" type="number">
+      Commission margin multiplier
+    </ResponseField>
+    
+    <ResponseField name="address" type="string">
+      Physical address
+    </ResponseField>
+    
+    <ResponseField name="phone" type="string">
+      Contact phone
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Contact email
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Active status
+    </ResponseField>
+    
+    <ResponseField name="settings" type="object">
+      Ventana-specific settings (print, theme)
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Pagination metadata
+  
+  <Expandable title="Meta object">
+    <ResponseField name="page" type="number">
+      Current page number
+    </ResponseField>
+    
+    <ResponseField name="pageSize" type="number">
+      Items per page
+    </ResponseField>
+    
+    <ResponseField name="total" type="number">
+      Total number of items
+    </ResponseField>
+    
+    <ResponseField name="totalPages" type="number">
+      Total number of pages
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "success": true,
+  "data": [
+    {
+      "id": "660e8400-e29b-41d4-a716-446655440000",
+      "bancaId": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Ventana Norte",
+      "code": "VN001",
+      "commissionMarginX": 1.5,
+      "address": "789 North Avenue",
+      "phone": "+1-234-567-8910",
+      "email": "ventana.norte@example.com",
+      "isActive": true,
+      "settings": {
+        "print": {
+          "width": 58
+        },
+        "theme": "light"
+      },
+      "createdAt": "2024-03-15T11:00:00Z",
+      "updatedAt": "2024-03-15T11:00:00Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "pageSize": 20,
+    "total": 1,
+    "totalPages": 1
+  }
+}
+```
+
+```json 401 - Unauthorized
+{
+  "success": false,
+  "error": "Unauthorized",
+  "message": "Authentication required"
+}
+```
+</ResponseExample>
+
+## Notes
+
+- Search performs fuzzy matching using PostgreSQL trigram indexes
+- Soft-deleted ventanas are excluded from results
+- Response includes nested banca information
+- Implementation: src/api/v1/controllers/ventana.controller.ts:31-38

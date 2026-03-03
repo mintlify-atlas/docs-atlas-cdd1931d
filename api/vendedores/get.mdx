@@ -1,0 +1,178 @@
+---
+title: 'Get Vendedor'
+api: 'GET /api/v1/vendedores/:id'
+description: 'Retrieve a specific vendedor by ID. Accessible by all authenticated users.'
+---
+
+## Overview
+
+Retrieves detailed information about a specific vendedor (seller). VENTANA users can only view vendedores within their own ventana.
+
+## Authorization
+
+<Info>**Required:** Valid JWT token (all authenticated users)</Info>
+
+Permissions:
+- **ADMIN**: Can view any vendedor
+- **VENTANA**: Can only view vendedores in their ventana
+- **VENDEDOR**: Can view any vendedor
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the vendedor to retrieve
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The vendedor user object (password excluded)
+  
+  <Expandable title="Vendedor object">
+    <ResponseField name="id" type="string">
+      UUID of the vendedor
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Vendedor's full name
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      Unique username
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Email address
+    </ResponseField>
+    
+    <ResponseField name="phone" type="string">
+      Phone number
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      Always "VENDEDOR"
+    </ResponseField>
+    
+    <ResponseField name="ventanaId" type="string">
+      Associated ventana UUID
+    </ResponseField>
+    
+    <ResponseField name="code" type="string">
+      Vendedor code
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Active status
+    </ResponseField>
+    
+    <ResponseField name="settings" type="object">
+      Vendedor-specific settings (print config, theme)
+    </ResponseField>
+    
+    <ResponseField name="platform" type="string">
+      User platform: "web", "android", or "ios"
+    </ResponseField>
+    
+    <ResponseField name="appVersion" type="string">
+      Application version (e.g., "2.0.7")
+    </ResponseField>
+    
+    <ResponseField name="deletedAt" type="string">
+      Soft delete timestamp (null if active)
+    </ResponseField>
+    
+    <ResponseField name="deletedBy" type="string">
+      User ID who deleted this vendedor (null if active)
+    </ResponseField>
+    
+    <ResponseField name="deletedReason" type="string">
+      Reason for deletion (null if active)
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "success": true,
+  "data": {
+    "id": "770e8400-e29b-41d4-a716-446655440000",
+    "name": "Carlos Martínez",
+    "username": "cmartinez",
+    "email": "cmartinez@example.com",
+    "phone": "8091234567",
+    "role": "VENDEDOR",
+    "ventanaId": "660e8400-e29b-41d4-a716-446655440000",
+    "code": "CM001",
+    "isActive": true,
+    "settings": {
+      "print": {
+        "name": "Portable Printer",
+        "phone": "8091234567",
+        "width": 58,
+        "footer": "Gracias por su preferencia",
+        "barcode": true,
+        "bluetoothMacAddress": "AA:BB:CC:DD:EE:FF"
+      },
+      "theme": "dark"
+    },
+    "platform": "android",
+    "appVersion": "2.0.7",
+    "deletedAt": null,
+    "deletedBy": null,
+    "deletedReason": null,
+    "createdAt": "2024-03-15T13:00:00Z",
+    "updatedAt": "2024-03-15T14:30:00Z"
+  }
+}
+```
+
+```json 404 - Not Found
+{
+  "success": false,
+  "error": "Not Found",
+  "message": "Vendedor not found"
+}
+```
+
+```json 403 - Forbidden
+{
+  "success": false,
+  "error": "Forbidden",
+  "message": "You don't have permission to view this vendedor"
+}
+```
+
+```json 400 - Invalid ID
+{
+  "success": false,
+  "error": "Validation failed",
+  "details": [
+    {
+      "field": "id",
+      "message": "id inválido (UUID)"
+    }
+  ]
+}
+```
+</ResponseExample>
+
+## Notes
+
+- Password is never included in response
+- ID must be a valid UUID format
+- VENTANA users can only access vendedores in their ventana (see src/api/v1/controllers/vendedor.controller.ts:70-76)
+- Returns 404 if vendedor is soft-deleted or doesn't have VENDEDOR role
+- Implementation: src/api/v1/controllers/vendedor.controller.ts:69-77

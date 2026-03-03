@@ -1,0 +1,537 @@
+---
+title: 'Get Ticket'
+openapi: 'GET /api/v1/tickets/:id'
+---
+
+Retrieves detailed information about a specific ticket by its UUID, including all jugadas, commission snapshots, sorteo details, and print configuration.
+
+## Authentication
+
+Requires authentication. Available to roles: `VENDEDOR`, `VENTANA`, `ADMIN`.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the ticket to retrieve.
+</ParamField>
+
+## Response Fields
+
+<ResponseField name="id" type="string">
+  Ticket UUID.
+</ResponseField>
+
+<ResponseField name="ticketNumber" type="string">
+  Unique ticket number in format `TYYMMDD-XXXXXX-CC` (e.g., `T260303-00042A-15`).
+</ResponseField>
+
+<ResponseField name="totalAmount" type="number">
+  Total amount of all jugadas.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Ticket status. Possible values:
+  - `ACTIVE`: Ticket is active and valid
+  - `CANCELLED`: Ticket was cancelled
+  - `EVALUATED`: Sorteo completed, winners determined
+  - `PAID`: Winner ticket fully paid
+  - `EXCLUDED`: Excluded from reports
+</ResponseField>
+
+<ResponseField name="isActive" type="boolean">
+  Whether the ticket is active.
+</ResponseField>
+
+<ResponseField name="isWinner" type="boolean">
+  Whether the ticket has any winning jugadas.
+</ResponseField>
+
+<ResponseField name="loteriaId" type="string">
+  UUID of the lottery.
+</ResponseField>
+
+<ResponseField name="sorteoId" type="string">
+  UUID of the sorteo.
+</ResponseField>
+
+<ResponseField name="ventanaId" type="string">
+  UUID of the ventana.
+</ResponseField>
+
+<ResponseField name="vendedorId" type="string">
+  UUID of the vendedor who created the ticket.
+</ResponseField>
+
+<ResponseField name="clienteNombre" type="string">
+  Customer name.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of ticket creation.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of last update.
+</ResponseField>
+
+<ResponseField name="businessDate" type="string">
+  Business date in Costa Rica timezone when ticket was created.
+</ResponseField>
+
+<ResponseField name="totalCommission" type="number">
+  Total commission amount (sum of all jugada commissions).
+</ResponseField>
+
+<ResponseField name="totalPayout" type="number">
+  Total payout amount for winning tickets. Null for non-winning tickets.
+</ResponseField>
+
+<ResponseField name="totalPaid" type="number">
+  Total amount paid out so far (for winning tickets).
+</ResponseField>
+
+<ResponseField name="remainingAmount" type="number">
+  Remaining payout amount for partially paid winners.
+</ResponseField>
+
+<ResponseField name="lastPaymentAt" type="string">
+  ISO 8601 timestamp of last payment (for winners).
+</ResponseField>
+
+<ResponseField name="paymentMethod" type="string">
+  Method of last payment: `cash`, `transfer`, `check`.
+</ResponseField>
+
+<ResponseField name="paymentNotes" type="string">
+  Notes from the last payment.
+</ResponseField>
+
+<ResponseField name="paymentHistory" type="array">
+  Complete history of payments for this ticket.
+  
+  <Expandable title="Payment History Entry">
+    <ResponseField name="id" type="string">
+      Payment UUID.
+    </ResponseField>
+    
+    <ResponseField name="amountPaid" type="number">
+      Amount paid in this payment.
+    </ResponseField>
+    
+    <ResponseField name="paidAt" type="string">
+      ISO 8601 timestamp of payment.
+    </ResponseField>
+    
+    <ResponseField name="paidById" type="string">
+      UUID of user who made the payment.
+    </ResponseField>
+    
+    <ResponseField name="paidByName" type="string">
+      Name of user who made the payment.
+    </ResponseField>
+    
+    <ResponseField name="method" type="string">
+      Payment method: `cash`, `transfer`, `check`.
+    </ResponseField>
+    
+    <ResponseField name="notes" type="string">
+      Payment notes.
+    </ResponseField>
+    
+    <ResponseField name="isFinal" type="boolean">
+      Whether this partial payment was marked as final.
+    </ResponseField>
+    
+    <ResponseField name="isReversed" type="boolean">
+      Whether this payment was reversed.
+    </ResponseField>
+    
+    <ResponseField name="reversedAt" type="string">
+      ISO 8601 timestamp of reversal.
+    </ResponseField>
+    
+    <ResponseField name="reversedBy" type="string">
+      UUID of user who reversed the payment.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="createdBy" type="string">
+  UUID of the user who created the ticket (may differ from vendedorId if created via impersonation).
+</ResponseField>
+
+<ResponseField name="createdByRole" type="string">
+  Role of the user who created the ticket: `VENDEDOR`, `VENTANA`, `ADMIN`.
+</ResponseField>
+
+<ResponseField name="isSorteoClosed" type="boolean">
+  Whether the associated sorteo has been closed.
+</ResponseField>
+
+<ResponseField name="jugadas" type="array">
+  Array of jugadas (bets) in this ticket.
+  
+  <Expandable title="Jugada Object">
+    <ResponseField name="id" type="string">
+      Jugada UUID.
+    </ResponseField>
+    
+    <ResponseField name="ticketId" type="string">
+      Reference to parent ticket UUID.
+    </ResponseField>
+    
+    <ResponseField name="number" type="string">
+      The lottery number bet on.
+    </ResponseField>
+    
+    <ResponseField name="amount" type="number">
+      Bet amount.
+    </ResponseField>
+    
+    <ResponseField name="type" type="string">
+      Bet type: `NUMERO` or `REVENTADO`.
+    </ResponseField>
+    
+    <ResponseField name="reventadoNumber" type="string">
+      Target number for REVENTADO bets. Null for NUMERO bets.
+    </ResponseField>
+    
+    <ResponseField name="multiplierId" type="string">
+      UUID of applied multiplier. Null if base multiplier used.
+    </ResponseField>
+    
+    <ResponseField name="finalMultiplierX" type="number">
+      Snapshot of multiplier value at ticket creation time.
+    </ResponseField>
+    
+    <ResponseField name="isWinner" type="boolean">
+      Whether this jugada won (number matched sorteo result).
+    </ResponseField>
+    
+    <ResponseField name="payout" type="number">
+      Payout amount for winning jugadas. Null for non-winners.
+    </ResponseField>
+    
+    <ResponseField name="commissionPercent" type="number">
+      Snapshot: Commission percentage applied (e.g., 5.5 for 5.5%).
+    </ResponseField>
+    
+    <ResponseField name="commissionAmount" type="number">
+      Snapshot: Calculated commission amount in colones.
+    </ResponseField>
+    
+    <ResponseField name="commissionOrigin" type="string">
+      Snapshot: Source of commission policy (`user`, `ventana`, `banca`, `listero`).
+    </ResponseField>
+    
+    <ResponseField name="commissionRuleId" type="string">
+      Snapshot: UUID of commission rule that applied.
+    </ResponseField>
+    
+    <ResponseField name="listeroCommissionAmount" type="number">
+      Snapshot: Commission amount for listero (ventana-level user).
+    </ResponseField>
+    
+    <ResponseField name="isExcluded" type="boolean">
+      Whether this jugada was excluded from reports.
+    </ResponseField>
+    
+    <ResponseField name="excludedAt" type="string">
+      ISO 8601 timestamp of exclusion.
+    </ResponseField>
+    
+    <ResponseField name="excludedBy" type="string">
+      UUID of user who excluded the jugada.
+    </ResponseField>
+    
+    <ResponseField name="excludedReason" type="string">
+      Reason for exclusion.
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Whether the jugada is active.
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of creation.
+    </ResponseField>
+    
+    <ResponseField name="multiplier" type="object">
+      Details of the applied multiplier (if any).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="loteria" type="object">
+  Lottery details.
+  
+  <Expandable title="Loteria Object">
+    <ResponseField name="id" type="string">
+      Lottery UUID.
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Lottery name (e.g., "TICA", "NACIONAL").
+    </ResponseField>
+    
+    <ResponseField name="rulesJson" type="object">
+      Lottery rules configuration.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sorteo" type="object">
+  Sorteo details with formatted name.
+  
+  <Expandable title="Sorteo Object">
+    <ResponseField name="id" type="string">
+      Sorteo UUID.
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Formatted sorteo name with time (e.g., "TICA 7:00 PM").
+    </ResponseField>
+    
+    <ResponseField name="scheduledAt" type="string">
+      ISO 8601 timestamp of scheduled draw time.
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Sorteo status: `SCHEDULED`, `EVALUATING`, `EVALUATED`, `CLOSED`.
+    </ResponseField>
+    
+    <ResponseField name="winningNumber" type="string">
+      Winning number if sorteo has been evaluated.
+    </ResponseField>
+    
+    <ResponseField name="hasWinner" type="boolean">
+      Whether any tickets won in this sorteo.
+    </ResponseField>
+    
+    <ResponseField name="digits" type="number">
+      Number of digits (2 for Tiempos, 3 for Monazos).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="vendedor" type="object">
+  Vendedor information with print configuration.
+  
+  <Expandable title="Vendedor Object">
+    <ResponseField name="id" type="string">
+      Vendedor UUID.
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Vendedor name.
+    </ResponseField>
+    
+    <ResponseField name="printName" type="string">
+      Name to print on tickets.
+    </ResponseField>
+    
+    <ResponseField name="printPhone" type="string">
+      Phone to print on tickets.
+    </ResponseField>
+    
+    <ResponseField name="printWidth" type="number">
+      Print width configuration (e.g., 48 for 48mm).
+    </ResponseField>
+    
+    <ResponseField name="printFooter" type="string">
+      Custom footer text for printed tickets.
+    </ResponseField>
+    
+    <ResponseField name="printBarcode" type="boolean">
+      Whether to print barcode.
+    </ResponseField>
+    
+    <ResponseField name="printBluetoothMacAddress" type="string">
+      Bluetooth MAC address for printer pairing.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="ventana" type="object">
+  Ventana information with print configuration (same structure as vendedor).
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X GET "https://api.example.com/api/v1/tickets/623e4567-e89b-12d3-a456-426614174000" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "623e4567-e89b-12d3-a456-426614174000",
+    "ticketNumber": "T260303-00042A-15",
+    "totalAmount": 1700,
+    "status": "ACTIVE",
+    "isActive": true,
+    "isWinner": false,
+    "loteriaId": "123e4567-e89b-12d3-a456-426614174000",
+    "sorteoId": "223e4567-e89b-12d3-a456-426614174000",
+    "ventanaId": "323e4567-e89b-12d3-a456-426614174000",
+    "vendedorId": "423e4567-e89b-12d3-a456-426614174000",
+    "clienteNombre": "Juan Pérez",
+    "createdAt": "2026-03-03T14:30:00.000Z",
+    "updatedAt": "2026-03-03T14:30:00.000Z",
+    "businessDate": "2026-03-03",
+    "totalCommission": 93.5,
+    "totalPayout": null,
+    "totalPaid": 0,
+    "remainingAmount": 0,
+    "lastPaymentAt": null,
+    "paymentMethod": null,
+    "paymentNotes": null,
+    "paymentHistory": [],
+    "createdBy": "423e4567-e89b-12d3-a456-426614174000",
+    "createdByRole": "VENDEDOR",
+    "isSorteoClosed": false,
+    "jugadas": [
+      {
+        "id": "723e4567-e89b-12d3-a456-426614174000",
+        "ticketId": "623e4567-e89b-12d3-a456-426614174000",
+        "number": "05",
+        "amount": 1000,
+        "type": "NUMERO",
+        "reventadoNumber": null,
+        "multiplierId": "523e4567-e89b-12d3-a456-426614174000",
+        "finalMultiplierX": 75,
+        "isWinner": false,
+        "payout": null,
+        "commissionPercent": 5.5,
+        "commissionAmount": 55,
+        "commissionOrigin": "user",
+        "commissionRuleId": "823e4567-e89b-12d3-a456-426614174000",
+        "listeroCommissionAmount": 10,
+        "isExcluded": false,
+        "excludedAt": null,
+        "excludedBy": null,
+        "excludedReason": null,
+        "isActive": true,
+        "createdAt": "2026-03-03T14:30:00.000Z",
+        "multiplier": {
+          "id": "523e4567-e89b-12d3-a456-426614174000",
+          "name": "Multiplicador Especial",
+          "multiplierX": 75
+        }
+      },
+      {
+        "id": "823e4567-e89b-12d3-a456-426614174001",
+        "ticketId": "623e4567-e89b-12d3-a456-426614174000",
+        "number": "12",
+        "amount": 500,
+        "type": "NUMERO",
+        "reventadoNumber": null,
+        "multiplierId": null,
+        "finalMultiplierX": 70,
+        "isWinner": false,
+        "payout": null,
+        "commissionPercent": 5.5,
+        "commissionAmount": 27.5,
+        "commissionOrigin": "user",
+        "commissionRuleId": "823e4567-e89b-12d3-a456-426614174000",
+        "listeroCommissionAmount": 5,
+        "isExcluded": false,
+        "isActive": true,
+        "createdAt": "2026-03-03T14:30:00.000Z",
+        "multiplier": null
+      },
+      {
+        "id": "823e4567-e89b-12d3-a456-426614174002",
+        "number": "05",
+        "amount": 200,
+        "type": "REVENTADO",
+        "reventadoNumber": "05",
+        "multiplierId": null,
+        "finalMultiplierX": 75,
+        "isWinner": false,
+        "payout": null,
+        "commissionPercent": 5.5,
+        "commissionAmount": 11,
+        "commissionOrigin": "user",
+        "commissionRuleId": "823e4567-e89b-12d3-a456-426614174000",
+        "listeroCommissionAmount": 2,
+        "isExcluded": false,
+        "isActive": true,
+        "createdAt": "2026-03-03T14:30:00.000Z"
+      }
+    ],
+    "loteria": {
+      "id": "123e4567-e89b-12d3-a456-426614174000",
+      "name": "TICA",
+      "rulesJson": {
+        "minBet": 100,
+        "maxBet": 10000,
+        "digits": 2
+      }
+    },
+    "sorteo": {
+      "id": "223e4567-e89b-12d3-a456-426614174000",
+      "name": "TICA 7:00 PM",
+      "scheduledAt": "2026-03-03T19:00:00.000Z",
+      "status": "SCHEDULED",
+      "winningNumber": null,
+      "hasWinner": false,
+      "digits": 2
+    },
+    "vendedor": {
+      "id": "423e4567-e89b-12d3-a456-426614174000",
+      "name": "Carlos Rodríguez",
+      "printName": "Vendedor #1",
+      "printPhone": "+506 8888-8888",
+      "printWidth": 48,
+      "printFooter": "Gracias por su compra",
+      "printBarcode": true,
+      "printBluetoothMacAddress": "00:11:22:33:44:55"
+    },
+    "ventana": {
+      "id": "323e4567-e89b-12d3-a456-426614174000",
+      "name": "Ventana Central",
+      "printName": "Ventana Central",
+      "printPhone": "+506 2222-2222",
+      "printWidth": 48,
+      "printFooter": null,
+      "printBarcode": true
+    }
+  }
+}
+```
+
+## Error Responses
+
+### 404 Not Found
+
+```json
+{
+  "success": false,
+  "error": "NOT_FOUND",
+  "message": "Ticket no encontrado"
+}
+```
+
+### 500 Internal Server Error - Invalid Sorteo
+
+```json
+{
+  "success": false,
+  "error": "INTERNAL_ERROR",
+  "message": "El ticket no tiene un sorteo asociado válido"
+}
+```
+
+## Notes
+
+- The sorteo name is formatted with scheduled time (e.g., "TICA 7:00 PM")
+- Print configuration is extracted from vendedor and ventana `settings` JSON field
+- Commission snapshots are immutable and show the commission rates at ticket creation time
+- The `finalMultiplierX` shows the multiplier value at the time the ticket was created
+- No RBAC filtering is applied on single ticket retrieval (any authenticated user can view any ticket)
+- Payment history shows the complete audit trail of all payments and reversals

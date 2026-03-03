@@ -1,0 +1,694 @@
+---
+title: Automated Jobs
+description: Scheduled jobs for sorteo automation, account settlements, and monthly closures
+---
+
+## Overview
+
+The Banca Management Backend runs four automated jobs that handle:
+
+1. **Sorteos Automation** - Auto-open, auto-create, and auto-close sorteos
+2. **Account Statement Settlement** - Automatic settlement of old account statements
+3. **Monthly Closing** - Calculate and save monthly balances for all entities
+4. **Activity Log Cleanup** - Remove old activity logs to prevent database bloat
+
+All jobs are initialized on server startup and run on configurable schedules.
+
+---
+
+## Job Initialization
+
+Jobs are started in `src/server/server.ts`:
+
+```typescript server.ts
+import { startSorteosAutoJobs } from '../jobs/sorteosAuto.job'
+import { startAccountStatementSettlementJob } from '../jobs/accountStatementSettlement.job'
+import { startMonthlyClosingJob } from '../jobs/monthlyClosing.job'
+
+server.listen(config.port, async () => {
+  // Initialize Redis (optional)
+  await initRedisClient()
+  
+  // Start automated jobs
+  startSorteosAutoJobs()
+  startAccountStatementSettlementJob()
+  startMonthlyClosingJob()
+  
+  logger.info({
+    layer: 'server',
+    action: 'SERVER_LISTEN',
+    payload: { port: config.port }
+  })
+})
+```
+
+### Graceful Shutdown
+
+All jobs are gracefully stopped on server shutdown:
+
+```typescript
+const gracefulShutdown = async (signal: string) => {
+  // Stop all jobs
+  stopSorteosAutoJobs()
+  stopAccountStatementSettlementJob()
+  stopMonthlyClosingJob()
+  
+  // Close connections
+  await closeRedisClient()
+  await prisma.$disconnect()
+  
+  process.exit(0)
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))
+```
+
+---
+
+## 1. Sorteos Automation Jobs
+
+### Overview
+
+Three automated tasks manage the sorteo lifecycle:
+
+| Job | Schedule | Purpose |
+|-----|----------|----------|
+| **Auto Open** | Daily 7:00 AM UTC<br/>(1:00 AM Costa Rica) | Opens `SCHEDULED` sorteos for the current day |
+| **Auto Create** | Daily 7:30 AM UTC<br/>(1:30 AM Costa Rica) | Creates sorteos 7 days ahead based on lottery rules |
+| **Auto Close** | Daily 4:00 AM UTC<br/>(10:00 PM Costa Rica) | Closes sorteos with zero sales |
+
+### Configuration
+
+Jobs check lottery configuration before executing:
+
+```typescript
+// Auto-open only runs if lottery has autoOpenEnabled = true
+// Auto-create only runs if lottery has autoCreateEnabled = true
+```
+
+### Auto Open Job
+
+**Purpose**: Opens sorteos that are scheduled for today
+
+**Logic**:
+1. Find all sorteos with `status = SCHEDULED` and `scheduledAt` is today (Costa Rica timezone)
+2. Update status to `OPEN` for each sorteo
+3. Log results
+
+**Example log output:**
+```json
+{
+  "layer": "job",
+  "action": "SORTEOS_AUTO_OPEN_COMPLETE",
+  "payload": {
+    "success": true,
+    "openedCount": 5,
+    "errorsCount": 0,
+    "executedAt": "2025-01-25T07:00:00.000Z"
+  }
+}
+```
+
+### Auto Create Job
+
+**Purpose**: Pre-creates sorteos based on lottery `rulesJson.drawSchedule`
+
+**Logic**:
+1. Find all lotteries with `autoCreateEnabled = true`
+2. For each lottery, generate sorteos 7 days ahead using `rulesJson.drawSchedule`
+3. Create sorteos with `status = SCHEDULED`
+4. Skip duplicates (unique constraint: `loteriaId` + `scheduledAt`)
+
+**Example log output:**
+```json
+{
+  "layer": "job",
+  "action": "SORTEOS_AUTO_CREATE_COMPLETE",
+  "payload": {
+    "success": true,
+    "createdCount": 42,
+    "skippedCount": 8,
+    "errorsCount": 0,
+    "executedAt": "2025-01-25T07:30:00.000Z"
+  }
+}
+```
+
+### Auto Close Job
+
+**Purpose**: Automatically close sorteos with no sales
+
+**Logic**:
+1. Find all sorteos with `status = OPEN` that have passed their `scheduledAt` time
+2. Check if sorteo has zero ticket sales
+3. Update status to `CLOSED` if no sales
+
+**Example log output:**
+```json
+{
+  "layer": "job",
+  "action": "SORTEOS_AUTO_CLOSE_COMPLETE",
+  "payload": {
+    "success": true,
+    "closedCount": 3,
+    "errorsCount": 0,
+    "executedAt": "2025-01-25T04:00:00.000Z"
+  }
+}
+```
+
+### Manual Execution
+
+For testing or manual triggers:
+
+```typescript
+import { triggerAutoOpen, triggerAutoCreate, triggerAutoClose } from '../jobs/sorteosAuto.job'
+
+// Trigger auto-open manually
+await triggerAutoOpen()
+
+// Trigger auto-create manually
+await triggerAutoCreate()
+
+// Trigger auto-close manually
+await triggerAutoClose()
+```
+
+---
+
+## 2. Account Statement Settlement Job
+
+### Overview
+
+**Schedule**: Daily 3:00 AM UTC (configurable via database)
+
+**Purpose**: Automatically settle account statements older than 7 days (configurable)
+
+### Configuration
+
+Managed via `account_statement_settlement_config` table:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | Boolean | `false` | Enable/disable automatic settlement |
+| `settlementAgeDays` | Integer | `7` | Days before settlement |
+| `batchSize` | Integer | `1000` | Max statements per run (capped at 2000) |
+| `cronSchedule` | String | `0 3 * * *` | Cron expression (minute hour * * *) |
+
+### Settlement Criteria
+
+A statement is settled if:
+- `isSettled = false`
+- `date < (today - settlementAgeDays)` in Costa Rica timezone
+- Has activity: `ticketCount > 0`
+
+<Warning>
+**Important**: Settlement does NOT require `remainingBalance ≈ 0`. Account statements always have balances (positive or negative).
+</Warning>
+
+### Settlement Process
+
+<Steps>
+
+<Step title="Connection Warmup">
+Warmup database connection to ensure readiness:
+
+```typescript
+const isReady = await warmupConnection({ 
+  useDirect: false, 
+  context: 'settlement' 
+})
+```
+</Step>
+
+<Step title="Load Configuration">
+Read settlement configuration from database:
+
+```typescript
+const config = await prisma.accountStatementSettlementConfig.findFirst()
+
+if (!config.enabled && !userId) {
+  // Skip if disabled and not manual execution
+  return
+}
+```
+</Step>
+
+<Step title="Calculate Cutoff Date">
+Calculate cutoff date in Costa Rica timezone:
+
+```typescript
+const todayCR = crDateService.dateUTCToCRString(new Date())
+const cutoffDateCR = new Date(todayCR)
+cutoffDateCR.setUTCDate(cutoffDateCR.getUTCDate() - config.settlementAgeDays)
+```
+</Step>
+
+<Step title="Fetch Statements to Settle">
+Query statements older than cutoff:
+
+```typescript
+const statementsToSettle = await prisma.accountStatement.findMany({
+  where: {
+    isSettled: false,
+    date: { lt: cutoffDateCR }
+  },
+  orderBy: { date: 'asc' },
+  take: safeBatchSize
+})
+```
+</Step>
+
+<Step title="Process Each Statement">
+Update statement as settled:
+
+```typescript
+await AccountStatementRepository.update(statement.id, {
+  isSettled: true,
+  canEdit: false,
+  totalPaid,
+  totalCollected,
+  settledAt: new Date(),
+  settledBy: userId || null,
+})
+```
+</Step>
+
+<Step title="Carry Forward Balances">
+Create statements for entities without activity but with pending balance:
+
+```typescript
+// Creates AccountStatement for today if:
+// - Entity has remainingBalance > 0
+// - No statement exists for today
+// - Entity is active
+```
+</Step>
+
+</Steps>
+
+### Example Log Output
+
+```json
+{
+  "layer": "job",
+  "action": "SETTLEMENT_COMPLETE",
+  "payload": {
+    "cutoffDateCR": "2025-01-18",
+    "settlementAgeDays": 7,
+    "totalProcessed": 30,
+    "settledCount": 30,
+    "skippedCount": 0,
+    "errorCount": 0,
+    "carryForward": {
+      "createdCount": 15,
+      "skippedCount": 235,
+      "errorCount": 0
+    }
+  }
+}
+```
+
+### Manual Execution
+
+```typescript
+import { executeSettlement } from '../jobs/accountStatementSettlement.job'
+
+// Manual execution (bypasses enabled check)
+await executeSettlement('user-uuid')
+
+// Specific month
+await executeSettlement('user-uuid')
+```
+
+---
+
+## 3. Monthly Closing Job
+
+### Overview
+
+**Schedule**: 1st of each month at 2:00 AM Costa Rica (8:00 AM UTC)
+
+**Purpose**: Calculate and save monthly closing balances for:
+- All vendedores (vendors)
+- All ventanas (windows)
+- All bancas (banks)
+
+### Process
+
+The job processes the **previous month** (not current month):
+
+<Steps>
+
+<Step title="Calculate Previous Month">
+```typescript
+const now = new Date()
+const nowCRStr = crDateService.dateUTCToCRString(now)
+const [currentYear, currentMonth] = nowCRStr.split('-').map(Number)
+
+let previousMonth = currentMonth - 1
+let previousYear = currentYear
+
+if (previousMonth < 1) {
+  previousMonth = 12
+  previousYear--
+}
+
+const closingMonth = `${previousYear}-${String(previousMonth).padStart(2, '0')}`
+// Example: "2024-12"
+```
+</Step>
+
+<Step title="Process Vendedores">
+Calculate real balance from tickets and payments:
+
+```typescript
+const balance = await calculateRealMonthBalance(
+  closingMonth,
+  'vendedor',
+  vendedorId,
+  ventanaId,
+  bancaId
+)
+
+await saveMonthlyClosingBalance(
+  closingMonth,
+  'vendedor',
+  balance,
+  vendedorId,
+  ventanaId,
+  bancaId
+)
+```
+</Step>
+
+<Step title="Process Ventanas (Batched)">
+Process in batches of 100 to prevent memory issues:
+
+```typescript
+const BATCH_SIZE = 100
+let skip = 0
+let hasMore = true
+
+while (hasMore) {
+  const ventanas = await prisma.ventana.findMany({
+    where: { isActive: true },
+    take: BATCH_SIZE,
+    skip,
+    orderBy: { id: 'asc' }
+  })
+  
+  // Process batch...
+  skip += BATCH_SIZE
+  hasMore = ventanas.length === BATCH_SIZE
+}
+```
+</Step>
+
+<Step title="Process Bancas (Batched)">
+Same batched approach for bancas.
+</Step>
+
+</Steps>
+
+### Balance Calculation
+
+Calculates from source of truth (tickets + payments):
+
+```typescript
+type MonthBalance = {
+  totalSales: number
+  totalPayouts: number
+  totalCommissions: number
+  netBalance: number
+  totalPaid: number
+  totalCollected: number
+  remainingBalance: number
+}
+```
+
+### Example Log Output
+
+```json
+{
+  "layer": "job",
+  "action": "MONTHLY_CLOSING_COMPLETE",
+  "payload": {
+    "closingMonth": "2024-12",
+    "totalSuccess": 250,
+    "totalErrors": 0,
+    "vendedores": { "success": 200, "errors": 0 },
+    "ventanas": { "success": 40, "errors": 0 },
+    "bancas": { "success": 10, "errors": 0 },
+    "executedBy": "SYSTEM"
+  }
+}
+```
+
+### Manual Execution
+
+```typescript
+import { executeMonthlyClosing } from '../jobs/monthlyClosing.job'
+
+// Execute for previous month
+await executeMonthlyClosing('user-uuid')
+
+// Execute for specific month
+await executeMonthlyClosing('user-uuid', '2024-11')
+```
+
+---
+
+## 4. Activity Log Cleanup Job
+
+### Overview
+
+**Schedule**: Daily 2:00 AM UTC
+
+**Purpose**: Delete activity logs older than 45 days to prevent database bloat
+
+**Retention**: 45 days
+
+### Process
+
+```typescript activityLogCleanup.job.ts
+const RETENTION_DAYS = 45
+
+const result = await ActivityLogService.cleanupOldLogs(RETENTION_DAYS)
+
+console.log(`Deleted ${result.deletedCount} activity log records`)
+```
+
+### Example Log Output
+
+```
+[Activity Log Cleanup] Starting cleanup job at 2025-01-25T02:00:00.000Z
+[Activity Log Cleanup] Deleting logs older than 45 days...
+[Activity Log Cleanup] ✅ Cleanup completed successfully
+[Activity Log Cleanup] Deleted 1234 activity log records
+```
+
+### Manual Execution
+
+```typescript
+import { triggerActivityLogCleanup } from '../jobs/activityLogCleanup.job'
+
+await triggerActivityLogCleanup()
+```
+
+---
+
+## Job Monitoring
+
+### Health Checks
+
+All jobs implement connection warmup before execution:
+
+```typescript
+const isReady = await warmupConnection({ 
+  useDirect: false, 
+  context: 'jobName' 
+})
+
+if (!isReady) {
+  logger.error({
+    layer: 'job',
+    action: 'JOB_SKIP',
+    payload: { reason: 'Connection warmup failed after retries' }
+  })
+  return
+}
+```
+
+### Active Operations Tracking
+
+Jobs register themselves for graceful shutdown:
+
+```typescript
+const operationId = `settlement-${Date.now()}`
+
+try {
+  activeOperationsService.register(operationId, 'job', 'Settlement Job')
+  
+  // Execute job...
+  
+} finally {
+  activeOperationsService.unregister(operationId)
+}
+```
+
+### Error Handling
+
+Jobs classify errors for better diagnostics:
+
+```typescript
+let errorType = "UNKNOWN_ERROR"
+if (errorCode === "P1001") errorType = "DB_UNREACHABLE"
+if (errorCode === "P2028") errorType = "POOLER_TIMEOUT"
+if (errorMessage.includes("query_wait_timeout")) errorType = "POOLER_WAIT_TIMEOUT"
+
+logger.error({
+  layer: "job",
+  action: "JOB_FAIL",
+  payload: { errorType, errorCode, error: errorMessage }
+})
+```
+
+---
+
+## Timezone Handling
+
+<Warning>
+**Critical**: All jobs use **Costa Rica timezone (UTC-6)** for business logic, but schedule times are in **UTC**.
+</Warning>
+
+### Schedule Conversion Examples
+
+| Job | Costa Rica Time | UTC Time |
+|-----|----------------|----------|
+| Auto Open | 1:00 AM CR | 7:00 AM UTC |
+| Auto Create | 1:30 AM CR | 7:30 AM UTC |
+| Auto Close | 10:00 PM CR | 4:00 AM UTC (next day) |
+| Settlement | 9:00 PM CR | 3:00 AM UTC (next day) |
+| Monthly Closing | 2:00 AM CR | 8:00 AM UTC |
+| Log Cleanup | 8:00 PM CR | 2:00 AM UTC (next day) |
+
+### Date Calculations
+
+Jobs use `crDateService` for timezone-aware operations:
+
+```typescript
+import { crDateService } from '../utils/crDateService'
+
+// Convert UTC Date to CR date string
+const todayCR = crDateService.dateUTCToCRString(new Date())
+// "2025-01-25"
+
+// Convert Postgres date to CR string
+const crDate = crDateService.postgresDateToCRString(statement.date)
+```
+
+---
+
+## Troubleshooting
+
+### Job Not Running
+
+**Check logs for scheduling confirmation:**
+```bash
+grep "JOB_SCHEDULED" logs/app.log
+```
+
+**Example output:**
+```json
+{
+  "layer": "job",
+  "action": "SORTEOS_AUTO_OPEN_SCHEDULED",
+  "payload": {
+    "nextRun": "2025-01-26T07:00:00.000Z",
+    "delayMinutes": 1320
+  }
+}
+```
+
+### Connection Warmup Failures
+
+**Problem**: Job skipped due to warmup failure
+
+**Solution**:
+1. Check database connectivity
+2. Verify `DATABASE_URL` is correct
+3. Check Supabase project status
+4. Review connection pool settings
+
+### Batch Size Warnings
+
+**Problem**: Job hitting batch size limit
+
+**Example log:**
+```json
+{
+  "layer": "job",
+  "action": "SETTLEMENT_MORE_RECORDS_AVAILABLE",
+  "payload": {
+    "batchSize": 1000,
+    "totalPending": 1500,
+    "message": "Processed 1000 records. 500 remaining for next execution."
+  }
+}
+```
+
+**Solution**: Increase `batchSize` in settlement configuration (max 2000)
+
+---
+
+## Best Practices
+
+<Steps>
+
+<Step title="Monitor Job Logs">
+Set up alerts for:
+- `*_JOB_FAIL` actions
+- `*_SKIP` actions (connection failures)
+- High error counts in completion logs
+</Step>
+
+<Step title="Configure Retention Appropriately">
+- Activity logs: 45 days (configurable)
+- Account statements: 7 days before settlement (configurable)
+- Monthly closures: Previous month only
+</Step>
+
+<Step title="Test Manual Execution">
+Periodically test manual job execution:
+
+```bash
+# Via endpoint (if implemented)
+curl -X POST https://api.example.com/admin/jobs/settlement/trigger
+
+# Or via code
+await executeSettlement('admin-uuid')
+```
+</Step>
+
+<Step title="Review Batch Sizes">
+- Settlement: Default 1000, max 2000
+- Monthly closing: Default 100 per entity type
+- Adjust based on database performance
+</Step>
+
+</Steps>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Deployment" icon="rocket" href="/operations/deployment">
+    Learn about production deployment
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/operations/monitoring">
+    Set up job monitoring and alerting
+  </Card>
+</CardGroup>

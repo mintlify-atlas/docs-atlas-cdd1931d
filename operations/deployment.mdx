@@ -1,0 +1,385 @@
+---
+title: Deployment Guide
+description: Production deployment and server configuration for the Banca Management Backend
+---
+
+## Overview
+
+This guide covers deploying the Banca Management Backend to production environments, including environment configuration, database setup, and server management.
+
+## Prerequisites
+
+- Node.js 20.x or higher
+- PostgreSQL 15+ database (Supabase recommended)
+- Redis instance (optional, for caching)
+- Secure environment for secrets management
+
+---
+
+## Environment Configuration
+
+### Required Environment Variables
+
+Create a `.env` file based on `.env.example`:
+
+<CodeGroup>
+```bash Server Configuration
+NODE_ENV=production
+PORT=3000
+LOG_LEVEL=info
+DISABLE_AUTH=false
+CORS_ORIGIN=https://your-frontend-domain.com
+```
+
+```bash Database URLs
+# Transaction Pooler (port 6543) - for API requests
+DATABASE_URL=postgresql://user:pass@host.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1
+
+# Direct URL (port 5432) - for migrations and jobs
+DIRECT_URL=postgresql://user:pass@host.supabase.co:5432/postgres
+
+# Read Replica (optional) - for analytics
+DATABASE_URL_REPLICA=postgresql://postgres.PROJECT_REF-rr-REGION:pass@aws-X-REGION.pooler.supabase.com:5432/postgres
+```
+
+```bash Authentication
+JWT_ACCESS_SECRET=your-strong-secret-here
+JWT_REFRESH_SECRET=your-strong-refresh-secret-here
+JWT_ACCESS_EXPIRES_IN=60m
+JWT_REFRESH_EXPIRES_IN=7d
+```
+
+```bash Redis Cache (optional)
+CACHE_ENABLED=true
+REDIS_URL=redis://your-redis-instance:6379
+REDIS_TOKEN=your-redis-token
+CACHE_TTL_CUTOFF=300
+CACHE_TTL_RESTRICTIONS=300
+```
+
+```bash Business Rules
+SALES_DAILY_MAX=100000
+MULTIPLIER_BASE_DEFAULT_X=90
+```
+</CodeGroup>
+
+<Warning>
+**Security Critical**: Never commit `.env` files to version control. Use secret management services (AWS Secrets Manager, HashiCorp Vault, etc.) in production.
+</Warning>
+
+---
+
+## Database Connection Strategy
+
+The backend uses three connection modes optimized for different workloads:
+
+### 1. Transaction Pooler (DATABASE_URL)
+- **Port**: 6543
+- **Mode**: PgBouncer transaction pooling
+- **Use for**: API requests, ticket creation, user operations
+- **Benefits**: Fast connection recycling, low latency
+
+### 2. Direct Connection (DIRECT_URL)
+- **Port**: 5432
+- **Mode**: Session pooler or direct connection
+- **Use for**: Migrations, cron jobs, long-running operations
+- **Benefits**: Stable for periodic operations
+
+### 3. Read Replica (DATABASE_URL_REPLICA)
+- **Port**: 5432
+- **Mode**: Session pooler (read-only)
+- **Use for**: Analytics, reports, dashboard queries
+- **Benefits**: Offload read traffic from primary database
+
+<Info>
+If `DATABASE_URL_REPLICA` is not configured, the system automatically falls back to `DATABASE_URL` without errors.
+</Info>
+
+---
+
+## Build and Deployment
+
+<Steps>
+
+<Step title="Install Dependencies">
+```bash
+npm install --production
+```
+</Step>
+
+<Step title="Generate Prisma Client">
+```bash
+npm run prisma:generate
+```
+
+This generates the Prisma Client based on your `schema.prisma`.
+</Step>
+
+<Step title="Run Database Migrations">
+```bash
+npm run migrate:deploy
+```
+
+See [Database Migrations](/operations/database-migrations) for detailed migration management.
+</Step>
+
+<Step title="Build TypeScript">
+```bash
+npm run build
+```
+
+Compiles TypeScript to JavaScript in the `dist/` directory.
+</Step>
+
+<Step title="Start Production Server">
+```bash
+npm start
+```
+
+Starts the server using the compiled JavaScript from `dist/index.js`.
+</Step>
+
+</Steps>
+
+---
+
+## Docker Deployment
+
+### Development with Docker Compose
+
+The project includes `docker-compose.yml` for local development databases:
+
+```yaml docker-compose.yml
+services:
+  # Development Database
+  postgres-dev:
+    image: postgres:15
+    container_name: bancas_dev_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev_password_123
+      POSTGRES_DB: bancas_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Test Database
+  postgres-test:
+    image: postgres:15
+    container_name: bancas_test_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: test_password_123
+      POSTGRES_DB: bancas_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+```
+
+**Start development databases:**
+```bash
+docker-compose up -d postgres-dev
+```
+
+---
+
+## Health Checks and Monitoring
+
+### Connection Warmup
+
+The backend implements connection warmup before executing jobs:
+
+```typescript server.ts
+import { warmupConnection } from '../core/connectionWarmup'
+
+// Before starting jobs
+const isReady = await warmupConnection({ 
+  useDirect: false, 
+  context: 'autoOpen' 
+})
+
+if (!isReady) {
+  logger.error('Connection warmup failed after retries')
+  return
+}
+```
+
+### Graceful Shutdown
+
+The server handles `SIGTERM` and `SIGINT` signals for graceful shutdown:
+
+1. **Mark shutting down** - Reject new operations
+2. **Wait for active operations** - Up to 30 seconds
+3. **Stop automated jobs** - Sorteos, settlements, closures
+4. **Close connections** - Redis, Prisma, HTTP server
+
+```typescript
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))
+```
+
+---
+
+## Production Checklist
+
+<Steps>
+
+<Step title="Environment Variables">
+- [ ] All required variables set (see `.env.example`)
+- [ ] Secrets stored securely (not in code)
+- [ ] `NODE_ENV=production`
+- [ ] `DISABLE_AUTH=false`
+</Step>
+
+<Step title="Database">
+- [ ] Migrations deployed successfully
+- [ ] Database backups configured
+- [ ] Connection pooling optimized
+- [ ] Read replica configured (if using analytics)
+</Step>
+
+<Step title="Security">
+- [ ] CORS configured for allowed origins
+- [ ] JWT secrets are strong and unique
+- [ ] Rate limiting enabled
+- [ ] Helmet security headers active
+</Step>
+
+<Step title="Monitoring">
+- [ ] Logging configured (Pino in production mode)
+- [ ] Error tracking enabled (Sentry configured)
+- [ ] Database connection monitoring
+- [ ] Job execution monitoring
+</Step>
+
+<Step title="Performance">
+- [ ] Redis cache enabled (if applicable)
+- [ ] Database indexes optimized
+- [ ] Transaction retry settings configured
+- [ ] Connection pooling tuned
+</Step>
+
+</Steps>
+
+---
+
+## Process Management
+
+### Using PM2 (Recommended)
+
+**Install PM2:**
+```bash
+npm install -g pm2
+```
+
+**Start application:**
+```bash
+pm2 start dist/index.js --name banca-backend
+```
+
+**Configure ecosystem:**
+```javascript ecosystem.config.js
+module.exports = {
+  apps: [{
+    name: 'banca-backend',
+    script: 'dist/index.js',
+    instances: 2,
+    exec_mode: 'cluster',
+    env: {
+      NODE_ENV: 'production',
+      PORT: 3000
+    },
+    error_file: 'logs/err.log',
+    out_file: 'logs/out.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+    autorestart: true,
+    max_restarts: 10,
+    min_uptime: '10s'
+  }]
+}
+```
+
+**Start with ecosystem:**
+```bash
+pm2 start ecosystem.config.js
+```
+
+---
+
+## Scaling Considerations
+
+### Horizontal Scaling
+
+- Multiple backend instances can run behind a load balancer
+- Ensure Redis is used for shared caching
+- Database connection pool sizing: `instances × connection_limit`
+
+### Vertical Scaling
+
+- Monitor memory usage (especially for large batch operations)
+- Adjust Node.js heap size if needed:
+  ```bash
+  node --max-old-space-size=4096 dist/index.js
+  ```
+
+### Job Distribution
+
+- Only one instance should run automated jobs (sorteos, settlements)
+- Use leader election if running multiple instances
+- Consider dedicated job worker instances
+
+---
+
+## Troubleshooting
+
+### Connection Issues
+
+**Problem**: `P1001: Database unreachable`
+
+**Solutions**:
+- Check database URL and credentials
+- Verify network connectivity
+- Check Supabase project status
+- Review connection pool settings
+
+### Migration Failures
+
+**Problem**: `P2034: Transaction aborted due to deadlock`
+
+**Solutions**:
+- Run migrations during low-traffic periods
+- Use `DIRECT_URL` for migrations (port 5432)
+- Check for concurrent migration attempts
+
+### Job Execution Errors
+
+**Problem**: Jobs not running
+
+**Solutions**:
+- Check server logs for job scheduling messages
+- Verify timezone calculations (jobs use UTC)
+- Check connection warmup status
+- Review job configuration in database
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Database Migrations" icon="database" href="/operations/database-migrations">
+    Learn how to manage Prisma migrations safely
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/operations/monitoring">
+    Set up logging and error tracking
+  </Card>
+  <Card title="Automated Jobs" icon="clock" href="/operations/jobs">
+    Configure sorteo automation and settlements
+  </Card>
+</CardGroup>

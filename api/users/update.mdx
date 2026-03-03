@@ -1,0 +1,220 @@
+---
+title: 'Update User'
+api: 'PATCH /api/v1/users/:id'
+description: 'Update an existing user. Accessible by ADMIN, self, or VENTANA (for their vendedores).'
+---
+
+## Overview
+
+Updates an existing user. All fields are optional - only provided fields will be updated. Users can update their own profile, ADMIN can update any user, and VENTANA users can update their vendedores.
+
+## Authorization
+
+<Info>**Required:** ADMIN, self, or VENTANA (for vendedores in their ventana)</Info>
+
+Permissions enforced by `restrictToAdminSelfOrVentanaVendor` middleware.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the user to update
+</ParamField>
+
+## Request Body
+
+<ParamField body="name" type="string">
+  User's full name (2-100 characters)
+</ParamField>
+
+<ParamField body="username" type="string">
+  Unique username (3-32 characters)
+</ParamField>
+
+<ParamField body="password" type="string">
+  New password (minimum 6 characters)
+</ParamField>
+
+<ParamField body="email" type="string">
+  Email address (must be valid email format, unique)
+</ParamField>
+
+<ParamField body="phone" type="string">
+  Phone number (max 32 characters)
+</ParamField>
+
+<ParamField body="role" type="string">
+  User role: "ADMIN", "VENTANA", or "VENDEDOR"
+</ParamField>
+
+<ParamField body="ventanaId" type="string">
+  UUID of associated ventana (required for non-ADMIN roles)
+</ParamField>
+
+<ParamField body="code" type="string">
+  Unique user code (2-32 characters)
+</ParamField>
+
+<ParamField body="isActive" type="boolean">
+  Whether the user is active
+</ParamField>
+
+<ParamField body="settings" type="object">
+  User-specific settings (merged with existing settings)
+  
+  <Expandable title="Settings object">
+    <ParamField body="settings.print" type="object">
+      Print configuration settings
+      
+      <Expandable title="Print settings">
+        <ParamField body="settings.print.name" type="string">
+          Printer name (max 100 characters)
+        </ParamField>
+        
+        <ParamField body="settings.print.phone" type="string">
+          Phone to print on receipts (max 32 characters)
+        </ParamField>
+        
+        <ParamField body="settings.print.width" type="number">
+          Paper width: 58 or 88 (mm)
+        </ParamField>
+        
+        <ParamField body="settings.print.footer" type="string">
+          Footer text (max 200 characters)
+        </ParamField>
+        
+        <ParamField body="settings.print.barcode" type="boolean">
+          Whether to print barcodes
+        </ParamField>
+        
+        <ParamField body="settings.print.bluetoothMacAddress" type="string">
+          Bluetooth MAC address (format: AA:BB:CC:DD:EE:FF or AABBCCDD)
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    
+    <ParamField body="settings.theme" type="string">
+      UI theme: "light" or "dark"
+    </ParamField>
+    
+    <ParamField body="settings.system" type="object">
+      System preferences (any JSON object for UI config)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The updated user object (password excluded)
+  
+  <Expandable title="User object">
+    <ResponseField name="id" type="string">
+      UUID of the user
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      User's full name
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      Unique username
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Email address
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      User role
+    </ResponseField>
+    
+    <ResponseField name="ventanaId" type="string">
+      Associated ventana UUID
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Active status
+    </ResponseField>
+    
+    <ResponseField name="settings" type="object">
+      User-specific settings
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp (updated)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "success": true,
+  "data": {
+    "id": "770e8400-e29b-41d4-a716-446655440000",
+    "name": "Juan Pérez Updated",
+    "username": "jperez",
+    "email": "newemail@example.com",
+    "phone": "8091234568",
+    "role": "VENDEDOR",
+    "ventanaId": "660e8400-e29b-41d4-a716-446655440000",
+    "code": "V001",
+    "isActive": true,
+    "settings": {
+      "print": {
+        "width": 88,
+        "barcode": true
+      },
+      "theme": "light"
+    },
+    "platform": "android",
+    "appVersion": "2.0.7",
+    "createdAt": "2024-03-15T12:00:00Z",
+    "updatedAt": "2024-03-15T16:45:00Z"
+  }
+}
+```
+
+```json 404 - Not Found
+{
+  "success": false,
+  "error": "Not Found",
+  "message": "User not found"
+}
+```
+
+```json 403 - Forbidden
+{
+  "success": false,
+  "error": "Forbidden",
+  "message": "You don't have permission to update this user"
+}
+```
+
+```json 400 - Validation Error
+{
+  "success": false,
+  "error": "Validation failed",
+  "details": [
+    {
+      "field": "ventanaId",
+      "message": "Selecciona una ventana"
+    }
+  ]
+}
+```
+</ResponseExample>
+
+## Notes
+
+- Password is hashed before storage if provided
+- Settings are merged (partial update) not replaced (see src/api/v1/validators/user.validator.ts:98)
+- Role changes are logged with USER_ROLE_CHANGE activity (see src/api/v1/controllers/user.controller.ts:113-122)
+- Role validation: non-ADMIN roles require ventanaId (see src/api/v1/validators/user.validator.ts:100-114)
+- Activity log created with USER_UPDATE event (see src/api/v1/controllers/user.controller.ts:124-132)
+- Phone numbers are normalized
+- Username is case-insensitive

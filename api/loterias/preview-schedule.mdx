@@ -1,0 +1,398 @@
+---
+title: Preview Schedule
+description: Preview sorteos that would be generated from a loteria's schedule configuration
+---
+
+## GET /api/v1/loterias/:id/preview_schedule
+
+Previews the sorteos that would be generated based on a loteria's `drawSchedule` configuration without actually creating them in the database.
+
+<Info>
+  Use this endpoint to verify schedule changes before generating sorteos with [Seed Sorteos](/api/loterias/seed-sorteos).
+</Info>
+
+### Authentication
+
+Requires authentication. Available to all roles.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the loteria to preview
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="start" type="string" default="now">
+  Start date/time for preview range.
+  
+  Format: ISO 8601 datetime or date string
+  
+  Examples:
+  - `"2025-03-03T00:00:00-06:00"` (specific datetime)
+  - `"2025-03-03"` (start of day in CR timezone)
+  
+  Default: Current server time
+</ParamField>
+
+<ParamField query="days" type="integer" default="1">
+  Number of days to preview.
+  
+  Min: 1, Max: 31
+</ParamField>
+
+<ParamField query="limit" type="integer" default="200">
+  Maximum number of sorteos to return.
+  
+  Min: 1, Max: 1000
+</ParamField>
+
+<ParamField query="allowPast" type="boolean" default="false">
+  Whether to include sorteos in the past.
+  
+  - `true`: Show all sorteos in date range
+  - `false`: Only show future sorteos
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the operation was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of preview sorteo objects
+  
+  <Expandable title="Preview Sorteo Object">
+    <ResponseField name="scheduledAt" type="string">
+      ISO 8601 datetime in Costa Rica timezone
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Generated sorteo name (loteria name + time)
+    </ResponseField>
+    
+    <ResponseField name="loteriaId" type="string">
+      UUID of the loteria
+    </ResponseField>
+    
+    <ResponseField name="alreadyExists" type="boolean">
+      Whether a sorteo already exists at this date/time
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Preview metadata
+  
+  <Expandable title="Meta Object">
+    <ResponseField name="count" type="integer">
+      Number of sorteos in preview
+    </ResponseField>
+    
+    <ResponseField name="from" type="string">
+      Start date of range (YYYY-MM-DD)
+    </ResponseField>
+    
+    <ResponseField name="to" type="string">
+      End date of range (YYYY-MM-DD)
+    </ResponseField>
+    
+    <ResponseField name="allowPast" type="boolean">
+      Whether past dates were included
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Request (Today)
+
+```bash
+curl "https://api.example.com/api/v1/loterias/550e8400-e29b-41d4-a716-446655440000/preview_schedule?days=1" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Request (Next Week)
+
+```bash
+curl "https://api.example.com/api/v1/loterias/550e8400-e29b-41d4-a716-446655440000/preview_schedule?start=2025-03-03&days=7" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "scheduledAt": "2025-03-03T12:55:00-06:00",
+      "name": "Lotto 12:55",
+      "loteriaId": "550e8400-e29b-41d4-a716-446655440000",
+      "alreadyExists": false
+    },
+    {
+      "scheduledAt": "2025-03-03T18:55:00-06:00",
+      "name": "Lotto 18:55",
+      "loteriaId": "550e8400-e29b-41d4-a716-446655440000",
+      "alreadyExists": true
+    },
+    {
+      "scheduledAt": "2025-03-04T12:55:00-06:00",
+      "name": "Lotto 12:55",
+      "loteriaId": "550e8400-e29b-41d4-a716-446655440000",
+      "alreadyExists": false
+    }
+  ],
+  "meta": {
+    "count": 3,
+    "from": "2025-03-03",
+    "to": "2025-03-04",
+    "allowPast": false
+  }
+}
+```
+
+### Error Responses
+
+<ResponseExample>
+```json Invalid Start Date
+{
+  "success": false,
+  "message": "start inválido"
+}
+```
+
+```json Invalid Days Range
+{
+  "success": false,
+  "message": "days debe ser 1..31"
+}
+```
+
+```json Loteria Not Found
+{
+  "success": false,
+  "error": "Lotería not found"
+}
+```
+</ResponseExample>
+
+## How Scheduling Works
+
+The preview uses the loteria's `rulesJson.drawSchedule` to calculate occurrences:
+
+<Steps>
+  <Step title="Parse Schedule Rules">
+    Read `frequency`, `times`, and optional `daysOfWeek` from loteria configuration.
+  </Step>
+  
+  <Step title="Calculate Occurrences">
+    Generate all possible draw times within the specified date range.
+  </Step>
+  
+  <Step title="Filter by Days">
+    If `daysOfWeek` is specified, filter to only those days.
+  </Step>
+  
+  <Step title="Filter by allowPast">
+    If `allowPast: false`, remove sorteos before current time.
+  </Step>
+  
+  <Step title="Check Existing">
+    Query database to see which sorteos already exist at those times.
+  </Step>
+  
+  <Step title="Apply Limit">
+    Return up to `limit` sorteos (default 200).
+  </Step>
+</Steps>
+
+## Understanding `alreadyExists`
+
+<Info>
+  The `alreadyExists` flag indicates whether a sorteo already exists in the database at that exact `scheduledAt` time.
+</Info>
+
+Use cases:
+
+<Tabs>
+  <Tab title="Planning Seed">
+    **Before seeding sorteos**
+    
+    Check which sorteos need to be created:
+    
+    ```bash
+    curl "https://api.example.com/api/v1/loterias/{id}/preview_schedule?days=7"
+    ```
+    
+    Result:
+    - `alreadyExists: false`: Will be created
+    - `alreadyExists: true`: Already exists, will be skipped
+  </Tab>
+  
+  <Tab title="Verify Schedule">
+    **After updating schedule**
+    
+    Verify new times are included:
+    
+    ```bash
+    curl "https://api.example.com/api/v1/loterias/{id}/preview_schedule?start=2025-03-04&days=1"
+    ```
+    
+    Check that new times appear in preview.
+  </Tab>
+  
+  <Tab title="Find Missing">
+    **Audit sorteo creation**
+    
+    Find gaps in sorteo coverage:
+    
+    Filter preview results where `alreadyExists: false` to see what's missing.
+  </Tab>
+</Tabs>
+
+## Date Range Examples
+
+<CodeGroup>
+```bash Today Only
+# Preview sorteos for today
+curl "https://api.example.com/api/v1/loterias/{id}/preview_schedule?days=1"
+```
+
+```bash Next Week
+# Preview next 7 days starting tomorrow
+curl "https://api.example.com/api/v1/loterias/{id}/preview_schedule?start=2025-03-04&days=7"
+```
+
+```bash Specific Month
+# Preview entire month of March
+curl "https://api.example.com/api/v1/loterias/{id}/preview_schedule?start=2025-03-01&days=31"
+```
+
+```bash Include Past
+# Preview last 3 days (including past sorteos)
+curl "https://api.example.com/api/v1/loterias/{id}/preview_schedule?start=2025-03-01&days=3&allowPast=true"
+```
+</CodeGroup>
+
+## Schedule Configuration Examples
+
+<Tabs>
+  <Tab title="Daily (All Days)">
+    **Configuration:**
+    ```json
+    {
+      "drawSchedule": {
+        "frequency": "diario",
+        "times": ["12:55", "18:55"]
+      }
+    }
+    ```
+    
+    **Preview Result (7 days):**
+    - 2 draws per day
+    - 7 days × 2 = **14 sorteos**
+  </Tab>
+  
+  <Tab title="Weekdays Only">
+    **Configuration:**
+    ```json
+    {
+      "drawSchedule": {
+        "frequency": "diario",
+        "times": ["12:55", "18:55"],
+        "daysOfWeek": [1, 2, 3, 4, 5]
+      }
+    }
+    ```
+    
+    **Preview Result (7 days):**
+    - 2 draws per weekday
+    - 5 weekdays × 2 = **10 sorteos**
+    - Weekends excluded
+  </Tab>
+  
+  <Tab title="Weekend Only">
+    **Configuration:**
+    ```json
+    {
+      "drawSchedule": {
+        "frequency": "diario",
+        "times": ["20:00"],
+        "daysOfWeek": [0, 6]
+      }
+    }
+    ```
+    
+    **Preview Result (7 days):**
+    - 1 draw per weekend day
+    - 2 weekend days × 1 = **2 sorteos**
+  </Tab>
+</Tabs>
+
+## Timezone Handling
+
+<Warning>
+  All times in `drawSchedule` are in **Costa Rica timezone (GMT-6)**.
+</Warning>
+
+The preview:
+1. Parses `start` date in Costa Rica timezone
+2. Calculates date range using CR timezone
+3. Generates sorteos with CR times
+4. Returns ISO 8601 with timezone offset (`-06:00`)
+
+See [Timezone Handling](/concepts/timezone-handling) for details.
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Before Seeding" icon="eye">
+    Preview before running [Seed Sorteos](/api/loterias/seed-sorteos) to verify:
+    
+    - Correct number of sorteos
+    - Correct times
+    - No unexpected duplicates
+  </Accordion>
+  
+  <Accordion title="After Schedule Change" icon="calendar">
+    After updating `drawSchedule`, preview to confirm:
+    
+    - New times are included
+    - Old times are removed (if applicable)
+    - Days of week filter working
+  </Accordion>
+  
+  <Accordion title="Audit Coverage" icon="check">
+    Check sorteo coverage for a date range:
+    
+    - Find gaps where sorteos are missing
+    - Verify all expected times exist
+    - Plan manual creation if needed
+  </Accordion>
+  
+  <Accordion title="Capacity Planning" icon="chart-line">
+    Estimate sorteo count for resource planning:
+    
+    - Preview a month to estimate database growth
+    - Calculate expected ticket volume
+    - Plan server capacity
+  </Accordion>
+</AccordionGroup>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Seed Sorteos" icon="seedling" href="/api/loterias/seed-sorteos">
+    Actually create the previewed sorteos
+  </Card>
+  <Card title="Get Loteria" icon="file" href="/api/loterias/get">
+    View current schedule configuration
+  </Card>
+  <Card title="Update Loteria" icon="pen" href="/api/loterias/update">
+    Modify draw schedule
+  </Card>
+  <Card title="List Sorteos" icon="list" href="/api/sorteos/list">
+    See existing sorteos
+  </Card>
+</CardGroup>

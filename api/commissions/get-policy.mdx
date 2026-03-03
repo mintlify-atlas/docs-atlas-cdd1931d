@@ -1,0 +1,283 @@
+---
+title: Get Commission Policy
+description: Retrieve commission policy configuration for bancas, ventanas, or users
+---
+
+## Overview
+
+Retrieve the hierarchical commission policy JSON for a specific entity. Policies define commission percentages based on lottery, bet type, and multiplier ranges.
+
+## Endpoints
+
+### Get Banca Policy
+
+```http
+GET /api/v1/bancas/:id/commission-policy
+```
+
+**Authorization:** ADMIN only
+
+### Get Ventana Policy
+
+```http
+GET /api/v1/ventanas/:id/commission-policy
+```
+
+**Authorization:** ADMIN can view any ventana, VENTANA can view their own
+
+### Get User Policy
+
+```http
+GET /api/v1/users/:id/commission-policy
+```
+
+**Authorization:** ADMIN, or the user themselves, or VENTANA viewing their vendor
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the banca, ventana, or user
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Entity details with commission policy
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Entity UUID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Entity name
+    </ResponseField>
+    
+    <ResponseField name="code" type="string">
+      Entity code (for banca/ventana)
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      Username (for user only)
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      User role (for user only): `ADMIN`, `VENTANA`, `VENDEDOR`
+    </ResponseField>
+    
+    <ResponseField name="commissionPolicyJson" type="object">
+      Commission policy configuration (null if not set)
+      
+      <Expandable title="Policy structure">
+        <ResponseField name="version" type="number">
+          Policy schema version (currently 1)
+        </ResponseField>
+        
+        <ResponseField name="effectiveFrom" type="string">
+          ISO 8601 date when policy becomes active (null = no start limit)
+        </ResponseField>
+        
+        <ResponseField name="effectiveTo" type="string">
+          ISO 8601 date when policy expires (null = no end limit)
+        </ResponseField>
+        
+        <ResponseField name="defaultPercent" type="number">
+          Default commission percentage (0-100, max 2 decimals)
+        </ResponseField>
+        
+        <ResponseField name="rules" type="array">
+          Array of commission rules (evaluated in order)
+          
+          <Expandable title="Rule structure">
+            <ResponseField name="id" type="string">
+              Unique rule identifier (UUID)
+            </ResponseField>
+            
+            <ResponseField name="loteriaId" type="string">
+              Loteria UUID (null = wildcard, matches any loteria)
+            </ResponseField>
+            
+            <ResponseField name="betType" type="string">
+              Bet type: `NUMERO`, `REVENTADO`, or null (wildcard)
+            </ResponseField>
+            
+            <ResponseField name="multiplierId" type="string">
+              Specific multiplier UUID (optional, for distinguishing multipliers with same value)
+            </ResponseField>
+            
+            <ResponseField name="multiplierRange" type="object">
+              Multiplier range (inclusive)
+              - `min` (number): Minimum multiplier value
+              - `max` (number): Maximum multiplier value (must equal min)
+            </ResponseField>
+            
+            <ResponseField name="percent" type="number">
+              Commission percentage for this rule (0-100, max 2 decimals)
+            </ResponseField>
+            
+            <ResponseField name="multiplier" type="object">
+              **Read-only:** Embedded multiplier details for frontend hydration
+              - `id` (string): Multiplier UUID
+              - `name` (string): Multiplier name
+              - `valueX` (number): Multiplier value
+              - `kind` (string): `NUMERO` or `REVENTADO`
+              - `loteriaId` (string): Loteria UUID
+              - `isActive` (boolean): Whether multiplier is active
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash Get Banca Policy
+curl -X GET "https://api.example.com/api/v1/bancas/550e8400-e29b-41d4-a716-446655440000/commission-policy" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash Get Ventana Policy
+curl -X GET "https://api.example.com/api/v1/ventanas/660e8400-e29b-41d4-a716-446655440000/commission-policy" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```bash Get User Policy
+curl -X GET "https://api.example.com/api/v1/users/770e8400-e29b-41d4-a716-446655440000/commission-policy" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Banca Central",
+    "code": "BC001",
+    "commissionPolicyJson": {
+      "version": 1,
+      "effectiveFrom": "2025-01-01T00:00:00.000Z",
+      "effectiveTo": null,
+      "defaultPercent": 5.0,
+      "rules": [
+        {
+          "id": "rule-uuid-1",
+          "loteriaId": "loteria-uuid",
+          "betType": "NUMERO",
+          "multiplierId": "multiplier-uuid",
+          "multiplierRange": { "min": 80, "max": 80 },
+          "percent": 8.5,
+          "multiplier": {
+            "id": "multiplier-uuid",
+            "name": "Base 80x",
+            "valueX": 80,
+            "kind": "NUMERO",
+            "loteriaId": "loteria-uuid",
+            "isActive": true
+          }
+        },
+        {
+          "id": "rule-uuid-2",
+          "loteriaId": null,
+          "betType": "REVENTADO",
+          "multiplierId": null,
+          "multiplierRange": { "min": 0, "max": 999 },
+          "percent": 12.0,
+          "multiplier": null
+        }
+      ]
+    }
+  }
+}
+```
+
+## Resolution Priority
+
+Commission policies follow a hierarchical resolution with **first match wins**:
+
+1. **USER** policy (highest priority)
+2. **VENTANA** policy
+3. **BANCA** policy (lowest priority)
+
+Within each policy, rules are evaluated in array order. The first rule matching all conditions (loteriaId, betType, multiplier range) is used.
+
+<Info>
+  The embedded `multiplier` object is populated by the backend for frontend convenience. It represents the actual multiplier entity that matches the rule's criteria.
+</Info>
+
+## Error Responses
+
+<ResponseExample>
+```json 404 Not Found
+{
+  "success": false,
+  "error": "Banca no encontrada",
+  "code": "BANCA_NOT_FOUND"
+}
+```
+
+```json 403 Forbidden
+{
+  "success": false,
+  "error": "No tiene permisos para ver esta política",
+  "code": "FORBIDDEN"
+}
+```
+
+```json 401 Unauthorized
+{
+  "success": false,
+  "error": "Token de autenticación requerido",
+  "code": "UNAUTHORIZED"
+}
+```
+</ResponseExample>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Set Commission Policy" icon="pen" href="/api/commissions/set-policy">
+    Update commission policy configuration
+  </Card>
+  <Card title="Commission Analytics" icon="chart-line" href="/api/commissions/analytics">
+    View commission metrics and reports
+  </Card>
+</CardGroup>
+
+## Implementation Details
+
+From `src/api/v1/controllers/commission.controller.ts:136-162`:
+
+```typescript
+async getBancaCommissionPolicy(req: AuthenticatedRequest, res: Response) {
+  const { id } = req.params;
+
+  const banca = await prisma.banca.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      commissionPolicyJson: true,
+    },
+  });
+
+  if (!banca) {
+    throw new AppError("Banca no encontrada", 404, { code: "BANCA_NOT_FOUND" });
+  }
+
+  const commissionPolicyJson = await embedMultipliersInPolicy(banca.commissionPolicyJson);
+  return success(res, { ...banca, commissionPolicyJson });
+}
+```
+
+The `embedMultipliersInPolicy` helper performs a single batch query to fetch all related multipliers and embed them in the policy rules for frontend hydration.

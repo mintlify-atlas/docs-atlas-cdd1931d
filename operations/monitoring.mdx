@@ -1,0 +1,632 @@
+---
+title: Monitoring & Logging
+description: Logging, error tracking, and system monitoring for the Banca Management Backend
+---
+
+## Overview
+
+The backend uses **Pino** for structured logging, **Sentry** for error tracking, and implements comprehensive monitoring across all layers of the application.
+
+---
+
+## Structured Logging with Pino
+
+### Logger Configuration
+
+The logger is configured in `src/core/logger.ts`:
+
+```typescript logger.ts
+import pino from 'pino'
+import { config } from '../config'
+
+const transport = config.nodeEnv !== 'production'
+  ? {
+      target: 'pino-pretty',
+      options: {
+        singleLine: true,
+        colorize: true,
+        translateTime: 'SYS:standard',
+        ignore: 'pid,hostname',
+      },
+    }
+  : undefined
+
+const baseLogger = pino({ 
+  level: config.logLevel ?? 'info', 
+  transport 
+})
+```
+
+**Environment-based behavior:**
+- **Development**: Pretty-printed, colorized output
+- **Production**: JSON-formatted logs for aggregation
+
+---
+
+## Log Structure
+
+All logs follow a standardized structure:
+
+```typescript
+type LogPayload = {
+  layer: string       // e.g., "controller", "service", "repository", "job"
+  action: string      // e.g., "TICKET_CREATE", "LOGIN", "SORTEOS_AUTO_OPEN"
+  userId?: string | null
+  requestId?: string | null
+  payload?: unknown   // Request body / input data
+  meta?: Record<string, unknown> | null  // Extra metadata, errors
+}
+```
+
+### Example Logs
+
+<CodeGroup>
+```typescript Info Log
+logger.info({
+  layer: 'service',
+  action: 'TICKET_CREATE',
+  userId: 'user-uuid',
+  requestId: 'req-123',
+  payload: { 
+    sorteoId: 'sorteo-uuid',
+    totalAmount: 500 
+  },
+})
+```
+
+```typescript Error Log
+logger.error({
+  layer: 'repository',
+  action: 'TICKET_CREATE_FAILED',
+  userId: 'user-uuid',
+  requestId: 'req-123',
+  meta: { 
+    error: error.message,
+    stack: error.stack,
+    errorCode: 'P2034'
+  },
+})
+```
+
+```typescript Job Log
+logger.info({
+  layer: 'job',
+  action: 'SORTEOS_AUTO_OPEN_COMPLETE',
+  requestId: null,
+  payload: {
+    success: true,
+    openedCount: 5,
+    errorsCount: 0,
+    executedAt: '2025-01-25T07:00:00.000Z'
+  },
+})
+```
+</CodeGroup>
+
+---
+
+## Log Levels
+
+Configure log level via `LOG_LEVEL` environment variable:
+
+```bash .env
+LOG_LEVEL=info  # Options: debug, info, warn, error
+```
+
+**Level hierarchy:**
+- `debug` - Development diagnostics (verbose)
+- `info` - General operational events
+- `warn` - Warning conditions (non-critical)
+- `error` - Error conditions requiring attention
+
+### Usage by Level
+
+```typescript
+// Debug - detailed diagnostics
+logger.debug({
+  layer: 'service',
+  action: 'RESTRICTION_CACHE_LOOKUP',
+  meta: { cacheHit: true, key: 'restriction:123' }
+})
+
+// Info - normal operations
+logger.info({
+  layer: 'controller',
+  action: 'TICKET_LIST',
+  userId: 'user-uuid',
+  payload: { page: 1, limit: 20 }
+})
+
+// Warn - potential issues
+logger.warn({
+  layer: 'service',
+  action: 'SALES_CUTOFF_NEAR',
+  meta: { minutesRemaining: 5 }
+})
+
+// Error - failures
+logger.error({
+  layer: 'repository',
+  action: 'DB_CONNECTION_FAILED',
+  meta: { error: 'P1001: Database unreachable' }
+})
+```
+
+---
+
+## Request Logging Middleware
+
+All HTTP requests are logged via Morgan middleware:
+
+```typescript server.ts
+import morgan from 'morgan'
+
+// HTTP request logging
+app.use(morgan('combined'))
+```
+
+**Morgan output format (combined):**
+```
+:remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent"
+```
+
+**Example:**
+```
+127.0.0.1 - - [25/Jan/2025:10:30:00 +0000] "POST /api/v1/tickets HTTP/1.1" 201 1234 "-" "Mozilla/5.0"
+```
+
+---
+
+## Error Tracking with Sentry
+
+### Sentry Configuration
+
+Sentry is configured for production error tracking:
+
+```typescript
+import * as Sentry from '@sentry/node'
+
+if (config.nodeEnv === 'production') {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: config.nodeEnv,
+    tracesSampleRate: 0.1,
+  })
+}
+```
+
+### Environment Variables
+
+```bash .env
+SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+```
+
+### Automatic Error Capture
+
+Sentry automatically captures:
+- Unhandled exceptions
+- Unhandled promise rejections
+- HTTP errors (4xx, 5xx)
+
+### Manual Error Reporting
+
+```typescript
+try {
+  // risky operation
+} catch (error) {
+  logger.error({
+    layer: 'service',
+    action: 'OPERATION_FAILED',
+    meta: { error: error.message }
+  })
+  
+  if (config.nodeEnv === 'production') {
+    Sentry.captureException(error, {
+      tags: { layer: 'service', action: 'OPERATION_FAILED' },
+      extra: { userId: 'user-uuid' }
+    })
+  }
+}
+```
+
+---
+
+## Job Monitoring
+
+All automated jobs emit structured logs for monitoring:
+
+### Sorteos Automation Job
+
+```typescript sorteosAuto.job.ts
+// Job start
+logger.info({
+  layer: 'job',
+  action: 'SORTEOS_AUTO_OPEN_START',
+  payload: { timestamp: new Date().toISOString() },
+})
+
+// Job completion
+logger.info({
+  layer: 'job',
+  action: 'SORTEOS_AUTO_OPEN_COMPLETE',
+  payload: {
+    success: result.success,
+    openedCount: result.openedCount,
+    errorsCount: result.errors.length,
+    executedAt: result.executedAt.toISOString(),
+  },
+})
+
+// Job errors
+logger.error({
+  layer: 'job',
+  action: 'SORTEOS_AUTO_OPEN_FAIL',
+  payload: {
+    error: error.message,
+    stack: error.stack,
+  },
+})
+```
+
+### Account Statement Settlement Job
+
+```typescript accountStatementSettlement.job.ts
+logger.info({
+  layer: 'job',
+  action: 'SETTLEMENT_START',
+  payload: {
+    cutoffDateCR: '2025-01-18',
+    settlementAgeDays: 7,
+    batchSize: 1000,
+    executedBy: 'SYSTEM',
+    diagnostics: {
+      totalStatements: 500,
+      settledStatementsCount: 450,
+      notSettledCount: 50,
+      notSettledOldEnoughCount: 30
+    }
+  }
+})
+```
+
+### Monthly Closing Job
+
+```typescript monthlyClosing.job.ts
+logger.info({
+  layer: 'job',
+  action: 'MONTHLY_CLOSING_COMPLETE',
+  payload: {
+    closingMonth: '2025-01',
+    totalSuccess: 250,
+    totalErrors: 0,
+    vendedores: { success: 200, errors: 0 },
+    ventanas: { success: 40, errors: 0 },
+    bancas: { success: 10, errors: 0 },
+    executedBy: 'SYSTEM',
+  },
+})
+```
+
+---
+
+## Database Monitoring
+
+### Connection Warmup
+
+The backend implements connection warmup before job execution:
+
+```typescript
+import { warmupConnection } from '../core/connectionWarmup'
+
+const isReady = await warmupConnection({ 
+  useDirect: false, 
+  context: 'settlement' 
+})
+
+if (!isReady) {
+  logger.error({
+    layer: 'job',
+    action: 'SETTLEMENT_SKIP',
+    payload: { reason: 'Connection warmup failed after retries' }
+  })
+  return
+}
+```
+
+### Connection Error Logging
+
+```typescript
+logger.error({
+  layer: 'job',
+  action: 'SORTEOS_AUTO_CLOSE_FAIL',
+  payload: {
+    errorType: 'DB_UNREACHABLE',  // P1001
+    errorCode: 'P1001',
+    error: 'Can\'t reach database server',
+    stack: error.stack
+  },
+})
+```
+
+**Common error types:**
+- `DB_UNREACHABLE` - P1001: Cannot connect to database
+- `POOLER_TIMEOUT` - P2028: Transaction timeout
+- `POOLER_WAIT_TIMEOUT` - Query wait timeout exceeded
+
+---
+
+## Activity Log System
+
+The backend persists critical activities to the `ActivityLog` table:
+
+```typescript
+await prisma.activityLog.create({
+  data: {
+    userId,
+    action: 'TICKET_CREATE',
+    targetType: 'TICKET',
+    targetId: ticket.id,
+    details: { 
+      totalAmount: ticket.totalAmount,
+      commissionOrigin: 'USER'
+    },
+  },
+})
+```
+
+### Tracked Actions
+
+**Sorteos:**
+- `SORTEO_CREATE`
+- `SORTEO_UPDATE`
+- `SORTEO_OPEN`
+- `SORTEO_CLOSE`
+- `SORTEO_EVALUATE`
+
+**Tickets:**
+- `TICKET_CREATE`
+- `TICKET_CANCEL`
+- `TICKET_PAY`
+- `TICKET_REVERSE_PAYMENT`
+
+**Loterias:**
+- `LOTERIA_CREATE`
+- `LOTERIA_UPDATE`
+- `LOTERIA_DELETE`
+
+**Users:**
+- `USER_CREATE`
+- `USER_UPDATE`
+- `USER_DELETE`
+- `USER_LOGIN`
+
+### Activity Log Cleanup
+
+Automated cleanup runs daily at 2:00 AM UTC:
+
+```typescript activityLogCleanup.job.ts
+const RETENTION_DAYS = 45
+
+const result = await ActivityLogService.cleanupOldLogs(RETENTION_DAYS)
+
+logger.info({
+  layer: 'job',
+  action: 'ACTIVITY_LOG_CLEANUP_COMPLETE',
+  payload: {
+    deletedCount: result.deletedCount,
+    retentionDays: RETENTION_DAYS
+  }
+})
+```
+
+---
+
+## Performance Monitoring
+
+### Query Execution Tracking
+
+Dashboard and analytics endpoints include query performance metadata:
+
+```typescript
+{
+  data: { /* response data */ },
+  metadata: {
+    queryExecutionTime: 234,  // milliseconds
+    totalQueries: 5,
+    timestamp: '2025-01-25T10:00:00.000Z'
+  }
+}
+```
+
+### Transaction Retry Logging
+
+```typescript
+logger.warn({
+  layer: 'utils',
+  action: 'TX_RETRY',
+  meta: {
+    attempt: 2,
+    maxRetries: 3,
+    error: 'P2034: Transaction aborted due to deadlock',
+    backoffMs: 500
+  }
+})
+```
+
+---
+
+## Alerting Setup
+
+### Log Aggregation
+
+For production, integrate with log aggregation services:
+
+**Recommended services:**
+- **Datadog**: Full APM and log aggregation
+- **New Relic**: Application monitoring
+- **Logtail**: Serverless-friendly logging
+- **CloudWatch Logs**: AWS-native solution
+
+**Example Datadog integration:**
+```bash
+# Install Datadog agent
+npm install dd-trace --save
+```
+
+```typescript index.ts
+import tracer from 'dd-trace'
+
+if (config.nodeEnv === 'production') {
+  tracer.init({
+    service: 'banca-backend',
+    env: config.nodeEnv,
+  })
+}
+```
+
+### Alert Rules
+
+**Recommended alerts:**
+
+1. **Error Rate Spike**
+   - Trigger: Error logs > 10 per minute
+   - Severity: High
+
+2. **Job Failures**
+   - Trigger: `SORTEOS_AUTO_*_FAIL` or `SETTLEMENT_JOB_ERROR`
+   - Severity: Critical
+
+3. **Database Connection Issues**
+   - Trigger: `DB_UNREACHABLE` or `POOLER_TIMEOUT`
+   - Severity: Critical
+
+4. **High Response Times**
+   - Trigger: P95 latency > 2 seconds
+   - Severity: Medium
+
+5. **Low Disk Space**
+   - Trigger: Database disk usage > 85%
+   - Severity: High
+
+---
+
+## Log Analysis Examples
+
+### Find Failed Tickets
+
+```bash
+# JSON logs
+cat logs/app.log | grep '"action":"TICKET_CREATE_FAILED"'
+
+# With jq
+cat logs/app.log | jq 'select(.action == "TICKET_CREATE_FAILED")'
+```
+
+### Track Job Execution
+
+```bash
+# Find all job executions today
+cat logs/app.log | jq 'select(.layer == "job" and .action | endswith("_COMPLETE"))'
+```
+
+### Monitor Settlement Job
+
+```bash
+# Settlement statistics
+cat logs/app.log | jq 'select(.action == "SETTLEMENT_COMPLETE") | .payload'
+```
+
+---
+
+## Graceful Shutdown Logging
+
+The server logs all shutdown phases:
+
+```typescript
+logger.info({ 
+  layer: 'server', 
+  action: 'SHUTDOWN_INITIATED', 
+  payload: { signal: 'SIGTERM' } 
+})
+
+logger.warn({
+  layer: 'server',
+  action: 'SHUTDOWN_FORCED',
+  payload: {
+    message: 'Some operations did not complete within timeout',
+    remainingOperations: 3
+  }
+})
+
+logger.info({ 
+  layer: 'server', 
+  action: 'PRISMA_DISCONNECTED' 
+})
+```
+
+---
+
+## Best Practices
+
+<Steps>
+
+<Step title="Use Structured Logging">
+Always use the `LogPayload` structure:
+
+```typescript
+// Good ✅
+logger.info({
+  layer: 'service',
+  action: 'USER_LOGIN',
+  userId: user.id,
+  payload: { role: user.role }
+})
+
+// Bad ❌
+console.log('User logged in:', user.id)
+```
+</Step>
+
+<Step title="Include Context">
+Add `requestId` for tracing requests across layers:
+
+```typescript
+logger.error({
+  layer: 'controller',
+  action: 'TICKET_CREATE_FAILED',
+  requestId: req.id,  // Trace through entire request
+  userId: req.user.id,
+  meta: { error: error.message }
+})
+```
+</Step>
+
+<Step title="Avoid Logging Sensitive Data">
+Never log:
+- Passwords or tokens
+- Full credit card numbers
+- Social security numbers
+- Personal identification data (beyond user ID)
+</Step>
+
+<Step title="Log at Appropriate Levels">
+- `debug`: Only development diagnostics
+- `info`: Normal operations
+- `warn`: Degraded performance or unusual conditions
+- `error`: Failures requiring attention
+</Step>
+
+</Steps>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Deployment" icon="rocket" href="/operations/deployment">
+    Learn about production deployment
+  </Card>
+  <Card title="Automated Jobs" icon="clock" href="/operations/jobs">
+    Configure and monitor automated jobs
+  </Card>
+</CardGroup>

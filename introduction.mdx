@@ -1,0 +1,136 @@
+---
+title: Introduction
+description: Welcome to the Banca Management Backend - a modular and scalable platform for managing lottery operations with TypeScript, Express, and Prisma ORM
+---
+
+# Banca Management Backend
+
+Welcome to the **Banca Management Backend**, a modern and scalable solution for comprehensive lottery management (Banca de Lotería). Built with **TypeScript**, **Express.js**, and **Prisma ORM**, this backend delivers enterprise-grade features including strict validation with Zod, complete audit trails via ActivityLog, and robust JWT authentication.
+
+<Note>
+  All dates in this system are handled in Costa Rica local time (UTC-6). See the timezone standards documentation for critical implementation details.
+</Note>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Layered Architecture" icon="layer-group">
+    Clean separation of concerns with Controllers, Services, and Repositories for maintainable and testable code
+  </Card>
+  
+  <Card title="Role-Based Access Control" icon="shield-halved">
+    Hierarchical roles (ADMIN, VENTANA, VENDEDOR) with JWT authentication and refresh tokens
+  </Card>
+  
+  <Card title="Transaction Safety" icon="lock">
+    Atomic operations with retry logic, deadlock handling, and concurrency control to prevent overselling
+  </Card>
+  
+  <Card title="Commission System" icon="percent">
+    Flexible hierarchical commission policies with JSON configuration, snapshots, and temporal validity
+  </Card>
+  
+  <Card title="Real-time Analytics" icon="chart-line">
+    Comprehensive dashboard with KPIs, time series analysis, exposure tracking, and performance metrics
+  </Card>
+  
+  <Card title="Complete Audit Trail" icon="file-lines">
+    All operations logged to ActivityLog with context tracking (layer, action, userId, requestId)
+  </Card>
+  
+  <Card title="Automated Draws" icon="calendar-check">
+    Schedule-based lottery draw generation with timezone-aware scheduling and idempotency
+  </Card>
+  
+  <Card title="Advanced Restrictions" icon="sliders">
+    Hierarchical restriction rules by user, ventana, or banca with number and time-based limits
+  </Card>
+</CardGroup>
+
+## System Overview
+
+The Banca Management Backend provides a complete solution for lottery operations, managing the entire lifecycle from ticket sales to draw evaluation and payout tracking.
+
+### Core Entities
+
+The system is built around a clear hierarchy:
+
+- **Banca** - Top-level organization defining global limits and default rules
+- **Ventana** - Sales windows with commission margins and configuration
+- **Vendedor** - Sales agents (users with VENDEDOR role) executing transactions
+- **Loteria** - Lottery games with configurable rules and schedules
+- **Sorteo** - Individual draws with lifecycle states (SCHEDULED → OPEN → CLOSED → EVALUATED)
+- **Ticket** - Sales records with atomic sequencing and validation
+
+### Architecture Highlights
+
+<Steps>
+  <Step title="Request Layer">
+    Express controllers handle HTTP requests with middleware for authentication, validation, and rate limiting
+  </Step>
+  
+  <Step title="Business Logic Layer">
+    Services implement domain logic, validations, and orchestrate repository operations within transactions
+  </Step>
+  
+  <Step title="Data Access Layer">
+    Repositories interact with PostgreSQL via Prisma Client, ensuring data consistency and type safety
+  </Step>
+  
+  <Step title="Cross-Cutting Concerns">
+    Centralized logging (Pino), error handling, activity auditing, and Redis caching (optional)
+  </Step>
+</Steps>
+
+## Technology Stack
+
+| Component | Technology |
+|-----------|------------|
+| **Runtime** | Node.js 20.x (TypeScript strict) |
+| **Framework** | Express.js |
+| **ORM** | Prisma Client (PostgreSQL) |
+| **Authentication** | JWT (Access + Refresh tokens) |
+| **Validation** | Zod |
+| **Logger** | Pino with structured logging |
+| **Configuration** | dotenv-safe |
+| **Rate Limiting** | express-rate-limit |
+| **Caching** | Redis (optional, via ioredis) |
+| **Testing** | Jest + Supertest |
+
+## What You Can Build
+
+This backend enables you to:
+
+- Manage multiple lottery games with custom rules and schedules
+- Process ticket sales with atomic sequencing and validation
+- Configure hierarchical commission structures
+- Set dynamic restrictions by number, time, user, or ventana
+- Track financial exposure and risk in real-time
+- Generate comprehensive analytics and reports
+- Automate draw scheduling with timezone-aware calculations
+- Maintain complete audit trails for compliance
+- Handle payments and CXC (accounts receivable) tracking
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get up and running in minutes with installation and first API request
+  </Card>
+  
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    Understand the system design, data flow, and component interaction
+  </Card>
+</CardGroup>
+
+## Support and Resources
+
+<Note>
+  This project is developed and maintained by **Mario Quirós P.** ([mquirosp78@gmail.com](mailto:mquirosp78@gmail.com))
+</Note>
+
+For detailed documentation on specific features:
+
+- **Commission System**: See `docs/COMMISSION_SYSTEM.md`
+- **Dashboard API**: See `docs/DASHBOARD_API.md`
+- **Timezone Standards**: See `docs/ESTANDAR_ZONA_HORARIA_COSTA_RICA.md`
+- **RBAC Security**: See `docs/BUG_FIX_RBAC_SCOPE_MINE.md`
+- **Payment Tracking**: See `docs/VENTAS_SUMMARY_API.md`

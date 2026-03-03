@@ -1,0 +1,299 @@
+---
+title: Timezone handling
+description: Costa Rica timezone (GMT-6) handling with UTC storage
+---
+
+<Warning>
+  **CRITICAL STANDARD:** ALL dates in this project are handled in Costa Rica local time (UTC-6). Never use `toISOString().split('T')[0]` directly on UTC dates without converting to Costa Rica timezone first.
+</Warning>
+
+The Banca Management Backend operates in **Costa Rica timezone (GMT-6)** and follows a strict timezone handling standard.
+
+## Core Principles
+
+<CardGroup cols={2}>
+  <Card title="Storage" icon="database">
+    All dates are stored in the database as **UTC** timestamps.
+  </Card>
+  <Card title="Display" icon="clock">
+    All dates are displayed and accepted in **Costa Rica local time (GMT-6)**.
+  </Card>
+  <Card title="Processing" icon="gear">
+    All date calculations use **Costa Rica timezone** context.
+  </Card>
+  <Card title="API" icon="code">
+    API accepts and returns dates in **ISO 8601 format** with timezone offset.
+  </Card>
+</CardGroup>
+
+## Why Costa Rica Time?
+
+Costa Rica does **not observe Daylight Saving Time (DST)**, which means:
+
+- The offset is always **GMT-6** year-round
+- No DST transitions to handle
+- Simplified timezone logic compared to regions with DST
+
+## Timezone Utilities
+
+The project includes timezone utilities for consistent date handling:
+
+```typescript
+import { 
+  toCostaRicaDate,
+  toCostaRicaDateString,
+  getCostaRicaNow,
+  parseCostaRicaDate 
+} from '../utils/timezone';
+
+// Get current date/time in Costa Rica
+const now = getCostaRicaNow(); // Date object in CR timezone
+
+// Convert UTC date to Costa Rica date string
+const utcDate = new Date('2025-03-03T18:55:00.000Z'); // 6:55 PM UTC
+const crDate = toCostaRicaDate(utcDate); // 2025-03-03 12:55 PM CR
+
+// Get date-only string in Costa Rica timezone
+const dateString = toCostaRicaDateString(utcDate); // "2025-03-03"
+
+// Parse a date string as Costa Rica timezone
+const parsed = parseCostaRicaDate('2025-03-03'); // Date object at midnight CR time
+```
+
+## Sorteo Scheduling
+
+Sorteo (lottery draw) times are configured in **Costa Rica local time** and converted to UTC for storage:
+
+### Example: Loteria Configuration
+
+```json
+{
+  "name": "Lotto",
+  "rulesJson": {
+    "drawSchedule": {
+      "frequency": "diario",
+      "times": ["12:55", "18:55"] // These are Costa Rica times!
+    }
+  }
+}
+```
+
+### Conversion Logic
+
+```typescript
+// From loteriaRules.ts
+function convertCostaRicaTimeToUTC(timeString: string, baseDate: Date): Date {
+  const [hours, minutes] = timeString.split(':').map(Number);
+  
+  // Create date in Costa Rica timezone
+  const crDate = new Date(baseDate);
+  crDate.setHours(hours, minutes, 0, 0);
+  
+  // Offset to UTC (CR is GMT-6, so add 6 hours)
+  const utcDate = new Date(crDate.getTime() + (6 * 60 * 60 * 1000));
+  
+  return utcDate;
+}
+
+// Example:
+// Input: "12:55" (12:55 PM Costa Rica time)
+// Output: Date object at 18:55 UTC (6:55 PM UTC)
+```
+
+### Stored Sorteo
+
+```json
+{
+  "id": "sorteo-uuid",
+  "loteriaId": "loteria-uuid",
+  "name": "Lotto 12:55 PM",
+  "scheduledAt": "2025-03-03T18:55:00.000Z", // UTC (12:55 PM CR + 6 hours)
+  "status": "OPEN"
+}
+```
+
+## Sales Cutoff Times
+
+Sales cutoff is calculated using Costa Rica timezone:
+
+```typescript
+// Close sales 5 minutes before draw
+const sorteoTime = new Date(sorteo.scheduledAt); // UTC
+const cutoffMinutes = 5;
+
+// Convert to Costa Rica time for calculation
+const crSorteoTime = toCostaRicaDate(sorteoTime);
+const crCutoffTime = new Date(crSorteoTime.getTime() - (cutoffMinutes * 60 * 1000));
+
+// Check if current CR time is past cutoff
+const now = getCostaRicaNow();
+if (now > crCutoffTime) {
+  throw new AppError('Sales closed for this sorteo', 400);
+}
+```
+
+## Date Filtering in APIs
+
+When filtering by date in API requests, use Costa Rica dates:
+
+### Request Example
+
+```bash
+# Get tickets from March 3, 2025 (Costa Rica date)
+curl "http://localhost:4000/api/v1/tickets?fromDate=2025-03-03&toDate=2025-03-03"
+```
+
+### Backend Processing
+
+```typescript
+// Convert CR date strings to UTC range
+const fromDateCR = parseCostaRicaDate(req.query.fromDate); // 2025-03-03 00:00 CR
+const toDateCR = parseCostaRicaDate(req.query.toDate); // 2025-03-03 00:00 CR
+const toDateEnd = new Date(toDateCR.getTime() + (24 * 60 * 60 * 1000) - 1); // End of day
+
+// Convert to UTC for database query
+const fromDateUTC = new Date(fromDateCR.getTime() + (6 * 60 * 60 * 1000));
+const toDateUTC = new Date(toDateEnd.getTime() + (6 * 60 * 60 * 1000));
+
+const tickets = await prisma.ticket.findMany({
+  where: {
+    createdAt: {
+      gte: fromDateUTC,
+      lte: toDateUTC
+    }
+  }
+});
+```
+
+## Common Pitfalls
+
+<Warning>
+  **Never do this:**
+  
+  ```typescript
+  // ❌ WRONG: Converts UTC date directly to string (loses timezone context)
+  const dateString = new Date().toISOString().split('T')[0];
+  ```
+  
+  **Always do this:**
+  
+  ```typescript
+  // ✅ CORRECT: Converts to Costa Rica timezone first
+  const dateString = toCostaRicaDateString(new Date());
+  ```
+</Warning>
+
+### Example Problem
+
+```typescript
+// Scenario: It's 11:00 PM on March 3 in Costa Rica (5:00 AM UTC March 4)
+
+const now = new Date(); // 2025-03-04T05:00:00.000Z (UTC)
+
+// ❌ WRONG: Returns "2025-03-04" (tomorrow in UTC, but still today in CR!)
+const wrong = now.toISOString().split('T')[0];
+
+// ✅ CORRECT: Returns "2025-03-03" (correct CR date)
+const correct = toCostaRicaDateString(now);
+```
+
+## Frontend Integration
+
+When displaying dates in the frontend:
+
+### Display Dates
+
+```typescript
+// API returns: "2025-03-03T18:55:00.000Z"
+
+// Convert to Costa Rica timezone for display
+import { format, utcToZonedTime } from 'date-fns-tz';
+
+const utcDate = new Date('2025-03-03T18:55:00.000Z');
+const crDate = utcToZonedTime(utcDate, 'America/Costa_Rica');
+const formatted = format(crDate, 'yyyy-MM-dd HH:mm', { timeZone: 'America/Costa_Rica' });
+// Result: "2025-03-03 12:55"
+```
+
+### Submit Dates
+
+```typescript
+// User selects "2025-03-03 12:55 PM" in UI
+
+// Convert to UTC before sending to API
+import { zonedTimeToUtc } from 'date-fns-tz';
+
+const crDate = new Date('2025-03-03 12:55:00');
+const utcDate = zonedTimeToUtc(crDate, 'America/Costa_Rica');
+const isoString = utcDate.toISOString(); // "2025-03-03T18:55:00.000Z"
+
+// Send to API
+fetch('/api/v1/sorteos', {
+  method: 'POST',
+  body: JSON.stringify({
+    scheduledAt: isoString
+  })
+});
+```
+
+## Database Schema
+
+All timestamp columns in the database are stored as `TIMESTAMPTZ` (timestamp with timezone) in UTC:
+
+```sql
+CREATE TABLE "Sorteo" (
+  "id" UUID PRIMARY KEY,
+  "scheduledAt" TIMESTAMPTZ NOT NULL, -- Stored in UTC
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(), -- Stored in UTC
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW() -- Stored in UTC
+);
+```
+
+## Idempotency and Unique Constraints
+
+Unique constraints use the UTC timestamp to prevent duplicates:
+
+```prisma
+model Sorteo {
+  id          String   @id @default(uuid()) @db.Uuid
+  loteriaId   String   @db.Uuid
+  scheduledAt DateTime
+  
+  @@unique([loteriaId, scheduledAt])
+}
+```
+
+This ensures that:
+- No duplicate sorteos for the same loteria at the same UTC time
+- Idempotent sorteo seeding (same schedule can be run multiple times safely)
+
+## Testing Considerations
+
+When writing tests, always use Costa Rica timezone context:
+
+```typescript
+import { parseCostaRicaDate, getCostaRicaNow } from '../utils/timezone';
+
+describe('Sorteo Creation', () => {
+  it('should create sorteo at correct UTC time', () => {
+    // Test time: 12:55 PM Costa Rica
+    const crTime = parseCostaRicaDate('2025-03-03 12:55:00');
+    const expectedUTC = new Date('2025-03-03T18:55:00.000Z');
+    
+    const sorteo = await createSorteo({ scheduledAt: crTime });
+    
+    expect(sorteo.scheduledAt).toEqual(expectedUTC);
+  });
+});
+```
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Sorteo Management" icon="calendar" href="/guides/sorteo-management">
+    Learn how to manage lottery draws
+  </Card>
+  <Card title="Analytics API" icon="chart-line" href="/guides/analytics">
+    Timezone handling in analytics
+  </Card>
+</CardGroup>

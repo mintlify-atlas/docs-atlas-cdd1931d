@@ -1,0 +1,373 @@
+---
+title: 'List Tickets'
+openapi: 'GET /api/v1/tickets'
+---
+
+Retrieves a paginated list of tickets with filtering capabilities. Results are filtered based on user role and RBAC permissions.
+
+## Authentication
+
+Requires authentication. Available to roles: `VENDEDOR`, `VENTANA`, `ADMIN`.
+
+## Query Parameters
+
+<ParamField query="page" type="number" default="1">
+  Page number for pagination.
+</ParamField>
+
+<ParamField query="pageSize" type="number" default="10">
+  Number of tickets per page.
+</ParamField>
+
+<ParamField query="scope" type="string" default="mine">
+  Filter scope based on user role:
+  - `mine`: User's own tickets (VENDEDOR: their tickets, VENTANA: their ventana's tickets)
+  - `all`: All tickets (ADMIN only)
+</ParamField>
+
+<ParamField query="date" type="string" default="today">
+  Date filter preset. Options:
+  - `today`: Today's tickets (Costa Rica timezone)
+  - `yesterday`: Yesterday's tickets
+  - `thisWeek`: Current week
+  - `thisMonth`: Current month
+  - `lastWeek`: Previous week
+  - `lastMonth`: Previous month
+  
+  Ignored if `fromDate` or `toDate` are provided.
+</ParamField>
+
+<ParamField query="fromDate" type="string">
+  Start date for custom range (ISO 8601 format). When provided, overrides `date` parameter.
+</ParamField>
+
+<ParamField query="toDate" type="string">
+  End date for custom range (ISO 8601 format). When provided, overrides `date` parameter.
+</ParamField>
+
+<ParamField query="number" type="string">
+  Filter by ticket number (e.g., "T260303-00042A-15").
+</ParamField>
+
+<ParamField query="winningNumber" type="string">
+  Filter by lottery winning number (shows tickets with jugadas matching this number).
+</ParamField>
+
+<ParamField query="scheduledTime" type="string">
+  Filter by sorteo scheduled time.
+</ParamField>
+
+<ParamField query="isActive" type="boolean">
+  Filter by active status.
+  - `true`: Only active tickets
+  - `false`: Only inactive tickets
+</ParamField>
+
+<ParamField query="winnersOnly" type="boolean">
+  Filter to show only winning tickets.
+  - `true`: Only tickets with `isWinner=true`
+  - `false`: Only non-winning tickets
+</ParamField>
+
+<ParamField query="loteriaId" type="string">
+  Filter by lottery UUID.
+</ParamField>
+
+<ParamField query="sorteoId" type="string">
+  Filter by sorteo UUID. When provided without explicit date range, date filters are skipped.
+</ParamField>
+
+<ParamField query="ventanaId" type="string">
+  Filter by ventana UUID. Subject to RBAC validation:
+  - **VENDEDOR**: Cannot specify (always filtered to their ventana)
+  - **VENTANA**: Cannot specify other ventanas
+  - **ADMIN**: Can specify any ventana
+</ParamField>
+
+<ParamField query="vendedorId" type="string">
+  Filter by vendedor UUID (maps to `userId` internally). Subject to RBAC validation:
+  - **VENDEDOR**: Cannot specify (always filtered to themselves)
+  - **VENTANA**: Can only specify vendedores in their ventana
+  - **ADMIN**: Can specify any vendedor
+</ParamField>
+
+<ParamField query="multiplierId" type="string">
+  Filter by multiplier UUID (shows tickets with jugadas using this multiplier).
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by ticket status. Options:
+  - `ACTIVE`: Active tickets
+  - `CANCELLED`: Cancelled tickets
+  - `EVALUATED`: Evaluated tickets (sorteo completed)
+  - `PAID`: Paid winning tickets
+  - `EXCLUDED`: Excluded from reports
+</ParamField>
+
+## Response Fields
+
+<ResponseField name="data" type="array">
+  Array of ticket objects.
+  
+  <Expandable title="Ticket Object">
+    <ResponseField name="id" type="string">
+      Ticket UUID.
+    </ResponseField>
+    
+    <ResponseField name="ticketNumber" type="string">
+      Unique ticket number (e.g., "T260303-00042A-15").
+    </ResponseField>
+    
+    <ResponseField name="totalAmount" type="number">
+      Total bet amount.
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Ticket status: `ACTIVE`, `CANCELLED`, `EVALUATED`, `PAID`, `EXCLUDED`.
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Whether the ticket is active.
+    </ResponseField>
+    
+    <ResponseField name="isWinner" type="boolean">
+      Whether the ticket has winning jugadas.
+    </ResponseField>
+    
+    <ResponseField name="loteriaId" type="string">
+      Lottery UUID.
+    </ResponseField>
+    
+    <ResponseField name="sorteoId" type="string">
+      Sorteo UUID.
+    </ResponseField>
+    
+    <ResponseField name="ventanaId" type="string">
+      Ventana UUID.
+    </ResponseField>
+    
+    <ResponseField name="vendedorId" type="string">
+      Vendedor UUID.
+    </ResponseField>
+    
+    <ResponseField name="clienteNombre" type="string">
+      Customer name.
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 creation timestamp.
+    </ResponseField>
+    
+    <ResponseField name="businessDate" type="string">
+      Business date (Costa Rica timezone).
+    </ResponseField>
+    
+    <ResponseField name="totalCommission" type="number">
+      Total commission amount.
+    </ResponseField>
+    
+    <ResponseField name="totalPayout" type="number">
+      Total payout for winning tickets. Null for non-winners.
+    </ResponseField>
+    
+    <ResponseField name="totalPaid" type="number">
+      Total amount paid out so far (for winners).
+    </ResponseField>
+    
+    <ResponseField name="remainingAmount" type="number">
+      Remaining payout amount (for partially paid winners).
+    </ResponseField>
+    
+    <ResponseField name="jugadas" type="array">
+      Array of jugadas (see Create Ticket endpoint for jugada structure).
+    </ResponseField>
+    
+    <ResponseField name="loteria" type="object">
+      Lottery details (id, name, etc.).
+    </ResponseField>
+    
+    <ResponseField name="sorteo" type="object">
+      Sorteo details (id, name, scheduledAt, status, winningNumber, etc.).
+    </ResponseField>
+    
+    <ResponseField name="vendedor" type="object">
+      Vendedor details (id, name, etc.).
+    </ResponseField>
+    
+    <ResponseField name="ventana" type="object">
+      Ventana details (id, name, etc.).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Pagination metadata.
+  
+  <Expandable title="Meta Object">
+    <ResponseField name="total" type="number">
+      Total number of tickets matching filters.
+    </ResponseField>
+    
+    <ResponseField name="page" type="number">
+      Current page number.
+    </ResponseField>
+    
+    <ResponseField name="pageSize" type="number">
+      Items per page.
+    </ResponseField>
+    
+    <ResponseField name="totalPages" type="number">
+      Total number of pages.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## RBAC Filtering
+
+The endpoint automatically applies role-based filters:
+
+### VENDEDOR
+- Automatically filters to tickets where `vendedorId = user.id`
+- Cannot see tickets from other vendedores
+- `scope` is always `mine`
+
+### VENTANA
+- Automatically filters to tickets where `ventanaId = user.ventanaId`
+- Can see all vendedores in their ventana
+- `scope` is always `mine`
+- If `ventanaId` is not in JWT, it's fetched from database
+
+### ADMIN
+- Can use `scope=all` to see all tickets
+- Can use `scope=mine` to see tickets from their assigned ventana
+- Can filter by any `ventanaId` or `vendedorId`
+
+## Date Range Resolution
+
+### Special Rule: sorteoId with No Explicit Dates
+
+When `sorteoId` is provided without `fromDate` or `toDate`, date filters are **skipped** to show all tickets for that sorteo regardless of when they were created.
+
+### Normal Date Resolution
+
+When no `sorteoId` is provided, or when explicit dates are given:
+
+1. **Explicit Range**: `fromDate` and `toDate` take precedence
+2. **Date Preset**: Uses `date` parameter (e.g., "today", "thisWeek")
+3. **Default**: "today" if nothing is specified
+
+All date ranges use Costa Rica timezone (America/Costa_Rica) for business date calculations.
+
+## Example Requests
+
+### Get Today's Tickets (VENDEDOR)
+
+```bash
+curl -X GET "https://api.example.com/api/v1/tickets?date=today&page=1&pageSize=20" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Get Tickets for Specific Sorteo (ADMIN)
+
+```bash
+curl -X GET "https://api.example.com/api/v1/tickets?sorteoId=223e4567-e89b-12d3-a456-426614174000&scope=all" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Get Winners Only with Custom Date Range
+
+```bash
+curl -X GET "https://api.example.com/api/v1/tickets?winnersOnly=true&fromDate=2026-03-01&toDate=2026-03-31" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Get Tickets by Number
+
+```bash
+curl -X GET "https://api.example.com/api/v1/tickets?number=T260303-00042A-15" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "623e4567-e89b-12d3-a456-426614174000",
+      "ticketNumber": "T260303-00042A-15",
+      "totalAmount": 1700,
+      "status": "ACTIVE",
+      "isActive": true,
+      "isWinner": false,
+      "loteriaId": "123e4567-e89b-12d3-a456-426614174000",
+      "sorteoId": "223e4567-e89b-12d3-a456-426614174000",
+      "ventanaId": "323e4567-e89b-12d3-a456-426614174000",
+      "vendedorId": "423e4567-e89b-12d3-a456-426614174000",
+      "clienteNombre": "Juan Pérez",
+      "createdAt": "2026-03-03T14:30:00.000Z",
+      "businessDate": "2026-03-03",
+      "totalCommission": 93.5,
+      "totalPayout": null,
+      "totalPaid": 0,
+      "remainingAmount": 0,
+      "jugadas": [
+        {
+          "id": "723e4567-e89b-12d3-a456-426614174000",
+          "number": "05",
+          "amount": 1000,
+          "type": "NUMERO",
+          "finalMultiplierX": 75,
+          "commissionPercent": 5.5,
+          "commissionAmount": 55
+        }
+      ],
+      "loteria": {
+        "id": "123e4567-e89b-12d3-a456-426614174000",
+        "name": "TICA"
+      },
+      "sorteo": {
+        "id": "223e4567-e89b-12d3-a456-426614174000",
+        "name": "TICA 7:00 PM",
+        "scheduledAt": "2026-03-03T19:00:00.000Z",
+        "status": "SCHEDULED"
+      },
+      "vendedor": {
+        "id": "423e4567-e89b-12d3-a456-426614174000",
+        "name": "Vendedor #1"
+      },
+      "ventana": {
+        "id": "323e4567-e89b-12d3-a456-426614174000",
+        "name": "Ventana Central"
+      }
+    }
+  ],
+  "meta": {
+    "total": 42,
+    "page": 1,
+    "pageSize": 10,
+    "totalPages": 5
+  }
+}
+```
+
+## Error Responses
+
+### 403 Forbidden
+
+```json
+{
+  "success": false,
+  "error": "FORBIDDEN",
+  "message": "Solo los administradores pueden usar scope='all'"
+}
+```
+
+## Notes
+
+- Results are automatically filtered based on user role and permissions
+- The `vendedorId` query parameter is mapped to `userId` internally for repository compatibility
+- Date filters use Costa Rica timezone for business date calculations
+- When filtering by `sorteoId` without explicit dates, all tickets for that sorteo are returned regardless of creation date
+- Activity logs track all list queries for audit purposes

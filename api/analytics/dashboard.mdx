@@ -1,0 +1,156 @@
+---
+title: Dashboard Overview
+api: GET /api/v1/admin/dashboard
+description: Get comprehensive dashboard metrics with KPIs, alerts, and breakdowns
+---
+
+## Overview
+
+Returns the main dashboard with all metrics including sales, payouts, exposure, alerts, and dimensional breakdowns. Supports RBAC filtering by banca/ventana.
+
+## Authentication
+
+Requires JWT authentication. **VENDEDOR** role is not authorized.
+- **ADMIN**: Can view all data or filter by banca (via active banca context)
+- **VENTANA**: Can only view their own window data
+
+## Query Parameters
+
+<ParamField query="date" type="enum" default="today">
+  Date range preset: `today`, `yesterday`, `week`, `month`, `year`, `range`
+</ParamField>
+
+<ParamField query="fromDate" type="string">
+  Start date in `YYYY-MM-DD` format (required if `date=range`)
+</ParamField>
+
+<ParamField query="toDate" type="string">
+  End date in `YYYY-MM-DD` format (required if `date=range`)
+</ParamField>
+
+<ParamField query="ventanaId" type="string">
+  Filter by specific ventana (admin only)
+</ParamField>
+
+<ParamField query="loteriaId" type="string">
+  Filter by specific lottery
+</ParamField>
+
+<ParamField query="betType" type="string">
+  Filter by bet type
+</ParamField>
+
+<ParamField query="scope" type="enum" default="all">
+  Data scope: `all`, `mine`
+</ParamField>
+
+<ParamField query="dimension" type="enum">
+  Breakdown dimension: `ventana`, `loteria`, `vendedor`
+</ParamField>
+
+<ParamField query="interval" type="enum">
+  Time series interval: `hour`, `day`, `week`
+</ParamField>
+
+## Response
+
+<ResponseField name="kpis" type="object">
+  Key performance indicators
+  
+  <Expandable title="properties">
+    <ResponseField name="totalSales" type="number">Total sales amount</ResponseField>
+    <ResponseField name="totalPayouts" type="number">Total payouts</ResponseField>
+    <ResponseField name="totalTickets" type="number">Number of tickets</ResponseField>
+    <ResponseField name="totalWinningTickets" type="number">Number of winning tickets</ResponseField>
+    <ResponseField name="netProfit" type="number">Net profit (sales - payouts)</ResponseField>
+    <ResponseField name="margin" type="number">Profit margin percentage</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="alerts" type="array">
+  Risk alerts and notifications
+  
+  <Expandable title="Alert object">
+    <ResponseField name="type" type="string">Alert type: `HIGH_EXPOSURE`, `LOW_MARGIN`, etc.</ResponseField>
+    <ResponseField name="severity" type="string">Severity: `critical`, `warning`, `info`</ResponseField>
+    <ResponseField name="message" type="string">Alert message</ResponseField>
+    <ResponseField name="value" type="number">Related metric value</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="byVentana" type="array">
+  Breakdown by ventana (if dimension=ventana)
+</ResponseField>
+
+<ResponseField name="byLoteria" type="array">
+  Breakdown by lottery (if dimension=loteria)
+</ResponseField>
+
+<ResponseField name="byVendedor" type="array">
+  Breakdown by seller (if dimension=vendedor)
+</ResponseField>
+
+## RBAC Filtering
+
+- **VENTANA users**: Automatically filtered to their window (ventanaId forced)
+- **ADMIN with active banca**: Automatically filtered to active banca context
+- **ADMIN without banca**: Can see all data or filter manually
+
+## Example Request
+
+```bash
+GET /api/v1/admin/dashboard?date=today&dimension=ventana&scope=all
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "kpis": {
+      "totalSales": 1500000,
+      "totalPayouts": 800000,
+      "totalTickets": 1234,
+      "totalWinningTickets": 89,
+      "netProfit": 700000,
+      "margin": 46.67
+    },
+    "alerts": [
+      {
+        "type": "HIGH_EXPOSURE",
+        "severity": "warning",
+        "message": "Exposición alta en número 25",
+        "value": 150000
+      }
+    ],
+    "byVentana": [
+      {
+        "ventanaId": "abc-123",
+        "ventanaName": "Ventana Centro",
+        "sales": 500000,
+        "payouts": 250000,
+        "tickets": 400,
+        "netProfit": 250000,
+        "margin": 50.0
+      }
+    ]
+  },
+  "meta": {
+    "range": {
+      "fromAt": "2024-03-15T06:00:00.000Z",
+      "toAt": "2024-03-16T05:59:59.999Z"
+    },
+    "generatedAt": "2024-03-15T12:00:00.000Z"
+  }
+}
+```
+
+## Date Range Resolution
+
+All date parameters use Costa Rica timezone (UTC-6). Dates are converted from CR local time to UTC for database queries.
+
+- `today`: Current CR day (06:00 UTC to 05:59:59 UTC next day)
+- `week`: Current CR week (Monday to Sunday)
+- `month`: Current CR month
+- `range`: Custom range using `fromDate` and `toDate`

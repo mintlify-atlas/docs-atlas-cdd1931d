@@ -1,122 +1,199 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Banca Management Backend",
+  "theme": "sequoia",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#2563eb",
+    "light": "#3b82f6",
+    "dark": "#1e40af"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/MQuirosP/backend-bancas"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/MQuirosP/backend-bancas"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "architecture"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/authentication",
+              "concepts/roles-permissions",
+              "concepts/timezone-handling",
+              "concepts/commission-system",
+              "concepts/multipliers"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/ticket-creation",
+              "guides/sorteo-management",
+              "guides/restriction-rules",
+              "guides/payments",
+              "guides/analytics"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Operations",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "operations/deployment",
+              "operations/database-migrations",
+              "operations/monitoring",
+              "operations/jobs"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Authentication",
             "pages": [
-              "api-reference/introduction"
+              "api/auth/login",
+              "api/auth/refresh",
+              "api/auth/logout"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Tickets",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/tickets/create",
+              "api/tickets/list",
+              "api/tickets/get",
+              "api/tickets/cancel"
+            ]
+          },
+          {
+            "group": "Sorteos (Draws)",
+            "pages": [
+              "api/sorteos/create",
+              "api/sorteos/list",
+              "api/sorteos/get",
+              "api/sorteos/update",
+              "api/sorteos/open",
+              "api/sorteos/close",
+              "api/sorteos/evaluate"
+            ]
+          },
+          {
+            "group": "Loterias",
+            "pages": [
+              "api/loterias/create",
+              "api/loterias/list",
+              "api/loterias/get",
+              "api/loterias/update",
+              "api/loterias/preview-schedule",
+              "api/loterias/seed-sorteos"
+            ]
+          },
+          {
+            "group": "Bancas & Ventanas",
+            "pages": [
+              "api/bancas/create",
+              "api/bancas/list",
+              "api/bancas/get",
+              "api/bancas/update",
+              "api/ventanas/create",
+              "api/ventanas/list",
+              "api/ventanas/get",
+              "api/ventanas/update"
+            ]
+          },
+          {
+            "group": "Users & Vendedores",
+            "pages": [
+              "api/users/create",
+              "api/users/list",
+              "api/users/get",
+              "api/users/update",
+              "api/vendedores/list",
+              "api/vendedores/get"
+            ]
+          },
+          {
+            "group": "Commissions",
+            "pages": [
+              "api/commissions/get-policy",
+              "api/commissions/set-policy",
+              "api/commissions/analytics"
+            ]
+          },
+          {
+            "group": "Restrictions & Rules",
+            "pages": [
+              "api/restrictions/create",
+              "api/restrictions/list",
+              "api/restrictions/get",
+              "api/restrictions/update",
+              "api/restrictions/delete"
+            ]
+          },
+          {
+            "group": "Multipliers",
+            "pages": [
+              "api/multipliers/create",
+              "api/multipliers/list",
+              "api/multipliers/get",
+              "api/multipliers/update",
+              "api/multipliers/overrides"
+            ]
+          },
+          {
+            "group": "Payments",
+            "pages": [
+              "api/payments/pay-ticket",
+              "api/payments/reverse-payment",
+              "api/payments/finalize-payment"
+            ]
+          },
+          {
+            "group": "Analytics & Reports",
+            "pages": [
+              "api/analytics/dashboard",
+              "api/analytics/timeseries",
+              "api/analytics/exposure",
+              "api/analytics/vendedores",
+              "api/reports/ventas-summary",
+              "api/reports/ventas-breakdown",
+              "api/reports/export"
+            ]
+          },
+          {
+            "group": "Accounts",
+            "pages": [
+              "api/accounts/statements",
+              "api/accounts/payments",
+              "api/accounts/settlements"
+            ]
+          },
+          {
+            "group": "Activity & Audit",
+            "pages": [
+              "api/activity/logs",
+              "api/activity/search"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

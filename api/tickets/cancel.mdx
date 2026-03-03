@@ -1,0 +1,236 @@
+---
+title: 'Cancel Ticket'
+openapi: 'POST /api/v1/tickets/:id/cancel'
+---
+
+Cancels an active ticket, marking it as `CANCELLED` and setting `isActive` to `false`. This action is logged in the activity system for audit purposes.
+
+## Authentication
+
+Requires authentication. Available to roles: `VENDEDOR`, `VENTANA`, `ADMIN`.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the ticket to cancel.
+</ParamField>
+
+## Request Body
+
+No request body required.
+
+## Response Fields
+
+<ResponseField name="id" type="string">
+  UUID of the cancelled ticket.
+</ResponseField>
+
+<ResponseField name="ticketNumber" type="string">
+  Unique ticket number (e.g., "T260303-00042A-15").
+</ResponseField>
+
+<ResponseField name="totalAmount" type="number">
+  Total amount of the ticket.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Updated status: `CANCELLED`.
+</ResponseField>
+
+<ResponseField name="isActive" type="boolean">
+  Updated active flag: `false`.
+</ResponseField>
+
+<ResponseField name="loteriaId" type="string">
+  UUID of the lottery.
+</ResponseField>
+
+<ResponseField name="sorteoId" type="string">
+  UUID of the sorteo.
+</ResponseField>
+
+<ResponseField name="ventanaId" type="string">
+  UUID of the ventana.
+</ResponseField>
+
+<ResponseField name="vendedorId" type="string">
+  UUID of the vendedor.
+</ResponseField>
+
+<ResponseField name="clienteNombre" type="string">
+  Customer name.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of ticket creation.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of last update (will reflect cancellation time).
+</ResponseField>
+
+<ResponseField name="deletedAt" type="string">
+  ISO 8601 timestamp when the ticket was cancelled (soft delete).
+</ResponseField>
+
+<ResponseField name="deletedBy" type="string">
+  UUID of the user who cancelled the ticket.
+</ResponseField>
+
+<ResponseField name="deletedReason" type="string">
+  Reason for cancellation (typically "Cancelled by user").
+</ResponseField>
+
+## Behavior
+
+### Soft Delete
+
+The cancel operation performs a soft delete:
+- Sets `status` to `CANCELLED`
+- Sets `isActive` to `false`
+- Sets `deletedAt` to current timestamp
+- Sets `deletedBy` to the requesting user's ID
+- Sets `deletedReason` to "Cancelled by user"
+
+The ticket record remains in the database but is excluded from most queries and reports.
+
+### Activity Logging
+
+A new activity log entry is created with:
+- **Action**: `TICKET_CANCEL`
+- **Target Type**: `TICKET`
+- **Target ID**: Ticket UUID
+- **Details**: Includes ticket number, total amount, and reason
+- **Description**: Human-readable cancellation summary
+
+### Validation
+
+The ticket must:
+- Exist in the database
+- Not already be cancelled
+- Not be in `EVALUATED` or `PAID` status (winners cannot be cancelled)
+
+## Example Request
+
+```bash
+curl -X POST "https://api.example.com/api/v1/tickets/623e4567-e89b-12d3-a456-426614174000/cancel" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json"
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "623e4567-e89b-12d3-a456-426614174000",
+    "ticketNumber": "T260303-00042A-15",
+    "totalAmount": 1700,
+    "status": "CANCELLED",
+    "isActive": false,
+    "loteriaId": "123e4567-e89b-12d3-a456-426614174000",
+    "sorteoId": "223e4567-e89b-12d3-a456-426614174000",
+    "ventanaId": "323e4567-e89b-12d3-a456-426614174000",
+    "vendedorId": "423e4567-e89b-12d3-a456-426614174000",
+    "clienteNombre": "Juan Pérez",
+    "createdAt": "2026-03-03T14:30:00.000Z",
+    "updatedAt": "2026-03-03T15:45:00.000Z",
+    "deletedAt": "2026-03-03T15:45:00.000Z",
+    "deletedBy": "423e4567-e89b-12d3-a456-426614174000",
+    "deletedReason": "Cancelled by user"
+  }
+}
+```
+
+## Error Responses
+
+### 404 Not Found
+
+```json
+{
+  "success": false,
+  "error": "NOT_FOUND",
+  "message": "Ticket no encontrado"
+}
+```
+
+### 409 Conflict - Already Cancelled
+
+```json
+{
+  "success": false,
+  "error": "CONFLICT",
+  "message": "El ticket ya fue cancelado"
+}
+```
+
+### 409 Conflict - Cannot Cancel Winner
+
+```json
+{
+  "success": false,
+  "error": "CONFLICT",
+  "message": "No se pueden cancelar tickets ganadores"
+}
+```
+
+## RBAC Considerations
+
+### VENDEDOR
+- Can cancel their own tickets
+- Cannot cancel tickets from other vendedores
+- Can only cancel tickets that are still `ACTIVE`
+
+### VENTANA
+- Can cancel tickets from any vendedor in their ventana
+- Can only cancel tickets that are still `ACTIVE`
+
+### ADMIN
+- Can cancel any ticket in the system
+- Can only cancel tickets that are still `ACTIVE`
+
+## Restore Functionality
+
+Cancelled tickets can be restored using the `POST /api/v1/tickets/:id/restore` endpoint, which:
+- Sets `status` back to `ACTIVE`
+- Sets `isActive` to `true`
+- Clears `deletedAt`, `deletedBy`, and `deletedReason`
+
+## Impact on Reports
+
+Cancelled tickets:
+- Are excluded from sales reports by default (via `deletedAt IS NULL` filter)
+- Are excluded from commission calculations
+- Are excluded from payout calculations
+- Can be included in reports by explicitly filtering for `status=CANCELLED`
+
+## Activity Log Example
+
+When a ticket is cancelled, an activity log entry is created:
+
+```json
+{
+  "userId": "423e4567-e89b-12d3-a456-426614174000",
+  "action": "TICKET_CANCEL",
+  "targetType": "TICKET",
+  "targetId": "623e4567-e89b-12d3-a456-426614174000",
+  "details": {
+    "ticketNumber": "T260303-00042A-15",
+    "totalAmount": 1700,
+    "reason": "Cancelled by user",
+    "description": "Ticket #T260303-00042A-15 cancelado (Monto: ₡1,700)"
+  },
+  "createdAt": "2026-03-03T15:45:00.000Z"
+}
+```
+
+## Notes
+
+- Cancellation is a soft delete operation - the ticket remains in the database
+- All jugadas associated with the ticket remain intact but inherit the cancelled status
+- Cancelled tickets do not affect lottery number limits or restrictions
+- Commission calculations exclude cancelled tickets
+- The operation is atomic and logged for audit purposes
+- Cancelled tickets cannot be cancelled again (idempotent operation)
+- Winners (tickets with `isWinner=true`) cannot be cancelled for financial integrity

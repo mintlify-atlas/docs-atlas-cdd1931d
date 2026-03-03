@@ -1,0 +1,79 @@
+---
+title: Finalize Payment
+api: PATCH /api/v1/ticket-payments/:id
+description: Update payment to mark as final or add notes
+---
+
+## Overview
+
+Updates a ticket payment to mark it as final (closing partial payments) or to add/update notes.
+
+## Authentication
+
+Requires JWT authentication. RBAC filtering applies based on user role.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the payment to update
+</ParamField>
+
+## Request Body
+
+<ParamField body="isFinal" type="boolean">
+  Mark payment as final (updates ticket status to PAID)
+</ParamField>
+
+<ParamField body="notes" type="string">
+  Update notes (max 300 characters)
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  Payment ID
+</ResponseField>
+
+<ResponseField name="isFinal" type="boolean">
+  Updated final status
+</ResponseField>
+
+<ResponseField name="notes" type="string">
+  Updated notes
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of update
+</ResponseField>
+
+## Status Codes
+
+- `200`: Payment updated successfully
+- `400`: Invalid input
+- `403`: RBAC violation
+- `404`: Payment not found
+
+## Example Request
+
+```json
+{
+  "isFinal": true,
+  "notes": "Pago completado - saldo restante cancelado"
+}
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "ticketId": "550e8400-e29b-41d4-a716-446655440000",
+    "amountPaid": 30000,
+    "isFinal": true,
+    "notes": "Pago completado - saldo restante cancelado",
+    "updatedAt": "2024-03-15T11:30:00.000Z"
+  }
+}
+```

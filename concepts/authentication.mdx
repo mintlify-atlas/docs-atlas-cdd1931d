@@ -1,0 +1,235 @@
+---
+title: Authentication
+description: JWT-based authentication system with access and refresh tokens
+---
+
+The Banca Management Backend uses JWT (JSON Web Tokens) for secure authentication with a dual-token system.
+
+## Token System
+
+The authentication system uses two types of tokens:
+
+<CardGroup cols={2}>
+  <Card title="Access Token" icon="key">
+    Short-lived token for API requests. Default expiration: 15 minutes.
+  </Card>
+  <Card title="Refresh Token" icon="rotate">
+    Long-lived token for obtaining new access tokens. Default expiration: 7 days.
+  </Card>
+</CardGroup>
+
+## Authentication Flow
+
+<Steps>
+  <Step title="Login">
+    User provides credentials (username/email and password) to `/api/v1/auth/login`.
+    
+    ```bash
+    curl -X POST http://localhost:4000/api/v1/auth/login \
+      -H "Content-Type: application/json" \
+      -d '{
+        "identifier": "your-username",
+        "password": "your-password"
+      }'
+    ```
+    
+    **Response:**
+    ```json
+    {
+      "success": true,
+      "data": {
+        "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+        "refreshToken": "eyJhbGciOiJIUzI1NiIs..."
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Authenticated Requests">
+    Include the access token in the `Authorization` header:
+    
+    ```bash
+    curl http://localhost:4000/api/v1/tickets \
+      -H "Authorization: Bearer {accessToken}"
+    ```
+  </Step>
+  
+  <Step title="Token Refresh">
+    When the access token expires, use the refresh token to get a new one:
+    
+    ```bash
+    curl -X POST http://localhost:4000/api/v1/auth/refresh \
+      -H "Content-Type: application/json" \
+      -d '{"refreshToken": "eyJhbGciOiJIUzI1NiIs..."}'
+    ```
+  </Step>
+  
+  <Step title="Logout">
+    Revoke the refresh token to prevent further token refreshes:
+    
+    ```bash
+    curl -X POST http://localhost:4000/api/v1/auth/logout \
+      -H "Content-Type: application/json" \
+      -d '{"refreshToken": "eyJhbGciOiJIUzI1NiIs..."}'
+    ```
+  </Step>
+</Steps>
+
+## Middleware Protection
+
+The `protect` middleware (from `src/middlewares/auth.middleware.ts`) validates JWT tokens on protected routes:
+
+```typescript
+export const protect = async (
+  req: AuthenticatedRequest,
+  _res: Response,
+  next: NextFunction
+) => {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith("Bearer ")) {
+    throw new AppError("Unauthorized", 401);
+  }
+
+  const token = header.split(" ")[1];
+  
+  // Verify JWT signature and expiration
+  let decoded: any;
+  try {
+    decoded = jwt.verify(token, config.jwtAccessSecret);
+  } catch {
+    throw new AppError("Invalid token", 401);
+  }
+
+  // Attach user to request
+  req.user = { 
+    id: decoded.sub, 
+    role: decoded.role,
+    ventanaId: decoded.ventanaId,
+    bancaId: decoded.bancaId 
+  };
+  next();
+};
+```
+
+## Token Payload
+
+Access tokens contain the following claims:
+
+<ResponseField name="sub" type="string" required>
+  User ID (subject)
+</ResponseField>
+
+<ResponseField name="role" type="enum" required>
+  User role: `ADMIN`, `VENTANA`, or `VENDEDOR`
+</ResponseField>
+
+<ResponseField name="ventanaId" type="string">
+  Ventana ID (for VENTANA and VENDEDOR roles)
+</ResponseField>
+
+<ResponseField name="bancaId" type="string">
+  Banca ID (for all users)
+</ResponseField>
+
+<ResponseField name="iat" type="number" required>
+  Issued at timestamp
+</ResponseField>
+
+<ResponseField name="exp" type="number" required>
+  Expiration timestamp
+</ResponseField>
+
+## Environment Configuration
+
+Configure JWT secrets and expiration in `.env`:
+
+```bash
+# JWT Configuration
+JWT_ACCESS_SECRET=your-access-secret-key
+JWT_REFRESH_SECRET=your-refresh-secret-key
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+
+# Development Only: Bypass authentication
+DISABLE_AUTH=false
+```
+
+<Warning>
+  Never use `DISABLE_AUTH=true` in production. This is only for development and simulates an ADMIN user for all requests.
+</Warning>
+
+## Security Features
+
+### Graceful Degradation
+
+The auth middleware separates JWT verification from infrastructure operations (Redis/Database):
+
+- **JWT errors** → 401 Unauthorized
+- **Infrastructure errors** → Retries with connection retry logic, then 500 if exhausted
+
+This prevents temporary database issues from logging out all users.
+
+### Refresh Token Revocation
+
+Refresh tokens are stored in the database and can be revoked:
+
+- On logout, the refresh token is marked as revoked
+- Revoked tokens cannot be used to obtain new access tokens
+- Each user can have multiple active refresh tokens (different devices)
+
+### Rate Limiting
+
+Authentication endpoints are protected with rate limiting:
+
+```typescript
+import rateLimit from 'express-rate-limit';
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 requests per window
+  message: 'Too many login attempts, please try again later'
+});
+
+router.post('/login', authLimiter, AuthController.login);
+```
+
+## Common Error Codes
+
+| Code | Message | Cause |
+|------|---------|-------|
+| 401 | Unauthorized | Missing or invalid token |
+| 401 | Invalid token | Token signature verification failed |
+| 401 | Token expired | Access token has expired (use refresh) |
+| 403 | Forbidden | Valid token but insufficient permissions |
+| 429 | Too Many Requests | Rate limit exceeded |
+
+## Best Practices
+
+<Accordion title="Store tokens securely">
+  - Never store tokens in localStorage (vulnerable to XSS)
+  - Use httpOnly cookies for web apps
+  - Use secure storage (Keychain/Keystore) for mobile apps
+</Accordion>
+
+<Accordion title="Handle token expiration">
+  - Implement automatic token refresh before expiration
+  - Show re-authentication prompt if refresh fails
+  - Clear tokens and redirect to login on 401 errors
+</Accordion>
+
+<Accordion title="Rotate refresh tokens">
+  - Consider implementing refresh token rotation for enhanced security
+  - Issue a new refresh token with each refresh request
+  - Revoke the old refresh token after successful rotation
+</Accordion>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Roles & Permissions" icon="shield" href="/concepts/roles-permissions">
+    Learn about the RBAC system
+  </Card>
+  <Card title="API: Login" icon="right-to-bracket" href="/api/auth/login">
+    Login endpoint reference
+  </Card>
+</CardGroup>

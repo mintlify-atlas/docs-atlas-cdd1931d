@@ -1,0 +1,297 @@
+---
+title: Roles and permissions
+description: Hierarchical role-based access control (RBAC) system
+---
+
+The Banca Management Backend implements a hierarchical RBAC system with three roles: **ADMIN**, **VENTANA**, and **VENDEDOR**.
+
+## Role Hierarchy
+
+```
+ADMIN (Super User)
+  ↓
+VENTANA (Window Manager)
+  ↓
+VENDEDOR (Seller)
+```
+
+Each role has specific permissions and access scopes:
+
+<CardGroup cols={3}>
+  <Card title="ADMIN" icon="crown">
+    **Full System Access**
+    
+    - Manage all bancas, ventanas, and users
+    - Access all tickets and sorteos
+    - Configure system-wide settings
+    - View global analytics
+    - Manage commission policies at all levels
+    - Create and modify restriction rules
+  </Card>
+  
+  <Card title="VENTANA" icon="store">
+    **Ventana Scope Access**
+    
+    - Manage vendedores in their ventana
+    - View tickets from their ventana
+    - Access ventana-level analytics
+    - Create tickets for their vendedores
+    - View sorteos and loterias
+    - Cannot modify system configuration
+  </Card>
+  
+  <Card title="VENDEDOR" icon="user">
+    **Personal Scope Access**
+    
+    - Create tickets for themselves
+    - View their own tickets
+    - Access personal sales analytics
+    - View active sorteos
+    - Cannot manage other users
+    - Cannot modify configuration
+  </Card>
+</CardGroup>
+
+## Role Enforcement
+
+Roles are enforced using middleware guards in `src/middlewares/roleGuards.middleware.ts`:
+
+### Basic Role Guards
+
+```typescript
+// Require specific role(s)
+export const requireRole = (...roles: Role[]) => 
+  (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
+    if (!req.user) throw new AppError("Unauthorized", 401);
+    if (!roles.includes(req.user.role)) throw new AppError("Forbidden", 403);
+    next();
+  };
+
+// Convenience guards
+export const requireAdmin = requireRole(Role.ADMIN);
+export const requireAdminOrVentana = requireRole(Role.ADMIN, Role.VENTANA);
+export const requireAdminVentanaOrVendedor = requireRole(Role.ADMIN, Role.VENTANA, Role.VENDEDOR);
+```
+
+### Usage in Routes
+
+```typescript
+import { protect } from '../middlewares/auth.middleware';
+import { requireAdmin, requireAdminOrVentana } from '../middlewares/roleGuards.middleware';
+
+// Admin only
+router.post('/bancas', protect, requireAdmin, BancaController.create);
+
+// Admin or Ventana
+router.get('/tickets', protect, requireAdminOrVentana, TicketController.list);
+
+// Any authenticated user
+router.get('/sorteos', protect, requireAuth, SorteoController.list);
+```
+
+## Data Scope Filtering
+
+The system applies automatic data filtering based on user role using the `applyRbacFilters` utility:
+
+### ADMIN Scope
+
+- No filters applied
+- Can access all data across all bancas and ventanas
+
+### VENTANA Scope
+
+- Filters applied: `WHERE ventanaId = {user.ventanaId}`
+- Can only access data from their assigned ventana
+- This includes tickets, vendedores, and analytics
+
+### VENDEDOR Scope
+
+- Filters applied: `WHERE vendedorId = {user.id}`
+- Can only access their own data
+- Cannot see other vendedores' tickets or sales
+
+### Implementation Example
+
+```typescript
+import { applyRbacFilters } from '../utils/rbac';
+
+export async function listTickets(req: AuthenticatedRequest) {
+  const baseQuery = {
+    where: {
+      deletedAt: null,
+      // ... other filters
+    }
+  };
+  
+  // Apply RBAC filtering
+  const filteredQuery = await applyRbacFilters(req.user, baseQuery, {
+    scope: 'mine' // or 'all' for admin-only endpoints
+  });
+  
+  return prisma.ticket.findMany(filteredQuery);
+}
+```
+
+## Permission Matrix
+
+| Resource | ADMIN | VENTANA | VENDEDOR |
+|----------|-------|---------|----------|
+| **Bancas** |
+| Create/Update/Delete | ✅ | ❌ | ❌ |
+| View All | ✅ | ❌ | ❌ |
+| View Own | ✅ | ✅ | ✅ |
+| **Ventanas** |
+| Create/Update/Delete | ✅ | ❌ | ❌ |
+| View All | ✅ | ❌ | ❌ |
+| View Own | ✅ | ✅ | ✅ |
+| **Users/Vendedores** |
+| Create Any | ✅ | ❌ | ❌ |
+| Create in Ventana | ✅ | ✅ | ❌ |
+| Update Any | ✅ | ❌ | ❌ |
+| Update in Ventana | ✅ | ✅ | ❌ |
+| Update Self | ✅ | ✅ | ✅ |
+| View All | ✅ | ❌ | ❌ |
+| View in Ventana | ✅ | ✅ | ❌ |
+| **Tickets** |
+| Create for Any Vendedor | ✅ | ❌ | ❌ |
+| Create for Ventana Vendedor | ✅ | ✅ | ❌ |
+| Create for Self | ✅ | ✅ | ✅ |
+| View All | ✅ | ❌ | ❌ |
+| View Ventana | ✅ | ✅ | ❌ |
+| View Own | ✅ | ✅ | ✅ |
+| Cancel Any | ✅ | ❌ | ❌ |
+| Cancel Ventana | ✅ | ✅ | ❌ |
+| Cancel Own | ✅ | ✅ | ✅ |
+| **Sorteos** |
+| Create/Update/Delete | ✅ | ❌ | ❌ |
+| Open/Close/Evaluate | ✅ | ❌ | ❌ |
+| View All | ✅ | ✅ | ✅ |
+| **Loterias** |
+| Create/Update/Delete | ✅ | ❌ | ❌ |
+| View All | ✅ | ✅ | ✅ |
+| **Commission Policies** |
+| Set Banca Policy | ✅ | ❌ | ❌ |
+| Set Ventana Policy | ✅ | ❌ | ❌ |
+| Set User Policy | ✅ | ❌ | ❌ |
+| View All Policies | ✅ | ❌ | ❌ |
+| View Own Policy | ✅ | ✅ | ✅ |
+| **Restriction Rules** |
+| Create/Update/Delete | ✅ | ❌ | ❌ |
+| View All | ✅ | ✅ | ✅ |
+| **Analytics** |
+| Global Dashboard | ✅ | ❌ | ❌ |
+| Ventana Dashboard | ✅ | ✅ | ❌ |
+| Personal Dashboard | ✅ | ✅ | ✅ |
+
+## Impersonation (Vendedor ID)
+
+VENTANA and ADMIN roles can create tickets on behalf of vendedores:
+
+```typescript
+// VENDEDOR: creates ticket for themselves (vendedorId ignored)
+POST /api/v1/tickets
+{
+  "sorteoId": "...",
+  "jugadas": [...]
+  // vendedorId is automatically set to req.user.id
+}
+
+// VENTANA: must specify vendedorId from their ventana
+POST /api/v1/tickets
+{
+  "vendedorId": "uuid-of-vendedor-in-my-ventana",
+  "sorteoId": "...",
+  "jugadas": [...]
+}
+
+// ADMIN: can specify any vendedorId
+POST /api/v1/tickets
+{
+  "vendedorId": "any-vendedor-uuid",
+  "sorteoId": "...",
+  "jugadas": [...]
+}
+```
+
+<Warning>
+  If ADMIN or VENTANA does not provide `vendedorId`, the request returns 400 Bad Request.
+</Warning>
+
+## Activity Logging
+
+All role-restricted actions are logged in the `ActivityLog` table with:
+
+- `userId` - Who performed the action
+- `action` - What action was performed (e.g., `TICKET_CREATE`, `USER_UPDATE`)
+- `targetType` and `targetId` - What resource was affected
+- `details` - Additional context (JSON)
+
+Example log entry:
+
+```json
+{
+  "userId": "ventana-user-id",
+  "action": "TICKET_CREATE",
+  "targetType": "TICKET",
+  "targetId": "ticket-uuid",
+  "details": {
+    "vendedorId": "vendedor-uuid",
+    "sorteoId": "sorteo-uuid",
+    "totalAmount": 1000,
+    "jugadasCount": 5
+  },
+  "createdAt": "2025-03-03T12:00:00.000Z"
+}
+```
+
+## Best Practices
+
+<Accordion title="Always use role guards on protected routes">
+  Never rely on client-side role checks. Always enforce permissions at the API level using middleware.
+  
+  ```typescript
+  // ❌ Bad: No role guard
+  router.delete('/bancas/:id', protect, BancaController.delete);
+  
+  // ✅ Good: Role guard enforced
+  router.delete('/bancas/:id', protect, requireAdmin, BancaController.delete);
+  ```
+</Accordion>
+
+<Accordion title="Apply RBAC filters to all queries">
+  Use `applyRbacFilters` consistently to prevent data leakage:
+  
+  ```typescript
+  // ✅ Correct: RBAC filtering applied
+  const query = await applyRbacFilters(req.user, baseQuery, { scope: 'mine' });
+  const tickets = await prisma.ticket.findMany(query);
+  ```
+</Accordion>
+
+<Accordion title="Validate vendedorId in impersonation scenarios">
+  When VENTANA creates tickets for vendedores, verify the vendedor belongs to their ventana:
+  
+  ```typescript
+  if (req.user.role === Role.VENTANA) {
+    const vendedor = await prisma.user.findUnique({
+      where: { id: vendedorId },
+      select: { ventanaId: true }
+    });
+    
+    if (vendedor.ventanaId !== req.user.ventanaId) {
+      throw new AppError('Cannot create ticket for vendedor outside your ventana', 403);
+    }
+  }
+  ```
+</Accordion>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/concepts/authentication">
+    Learn about JWT authentication
+  </Card>
+  <Card title="Activity Logs" icon="list" href="/api/activity/logs">
+    View activity log API
+  </Card>
+</CardGroup>

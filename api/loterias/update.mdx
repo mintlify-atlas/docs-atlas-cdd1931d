@@ -1,0 +1,353 @@
+---
+title: Update Loteria
+description: Update loteria configuration, rules, and schedules with cascade effects
+---
+
+## PATCH /api/v1/loterias/:id
+
+Updates an existing loteria's configuration. Changes to `isActive` will cascade to associated sorteos.
+
+<Warning>
+  Changing `isActive` affects all sorteos for this loteria. Deactivating cascades to sorteos, activating restores them.
+</Warning>
+
+### Authentication
+
+Requires authentication. Typically **ADMIN** role for updates.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the loteria to update
+</ParamField>
+
+### Request Body
+
+All fields are optional. Only provided fields will be updated.
+
+<ParamField body="name" type="string">
+  Update the loteria name.
+  
+  Min: 2 characters
+  
+  <Warning>
+    Name must be unique across all loterias.
+  </Warning>
+</ParamField>
+
+<ParamField body="rulesJson" type="object" nullable>
+  Update configuration rules.
+  
+  See [Create Loteria](/api/loterias/create) for full schema.
+</ParamField>
+
+<ParamField body="isActive" type="boolean">
+  Activate or deactivate the loteria.
+  
+  <Info>
+    Changing this field triggers cascade operations on all associated sorteos.
+  </Info>
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the operation was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The updated loteria object
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X PATCH https://api.example.com/api/v1/loterias/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rulesJson": {
+      "digits": 2,
+      "drawSchedule": {
+        "frequency": "diario",
+        "times": ["12:55", "18:55", "20:55"]
+      },
+      "reventadoConfig": {
+        "enabled": true
+      },
+      "autoCreateSorteos": true
+    }
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Lotto",
+    "rulesJson": {
+      "digits": 2,
+      "drawSchedule": {
+        "frequency": "diario",
+        "times": ["12:55", "18:55", "20:55"]
+      },
+      "reventadoConfig": {
+        "enabled": true
+      },
+      "autoCreateSorteos": true
+    },
+    "isActive": true,
+    "createdAt": "2025-03-03T10:00:00-06:00",
+    "updatedAt": "2025-03-03T14:30:00-06:00"
+  }
+}
+```
+
+### Error Responses
+
+<ResponseExample>
+```json Not Found
+{
+  "success": false,
+  "error": "Lotería not found"
+}
+```
+
+```json Name Too Short
+{
+  "success": false,
+  "error": "El nombre debe tener al menos 2 caracteres"
+}
+```
+
+```json Duplicate Name
+{
+  "success": false,
+  "error": "Lotería with name already exists"
+}
+```
+</ResponseExample>
+
+## Cascade Effects
+
+<Warning>
+  Changes to `isActive` trigger automatic cascade operations on all associated sorteos.
+</Warning>
+
+<Tabs>
+  <Tab title="Deactivate Loteria">
+    **Setting `isActive: false`**
+    
+    Cascade effect:
+    1. Loteria is marked inactive
+    2. All SCHEDULED sorteos are marked `isActive: false`
+    3. Sorteos remain in database but hidden from vendedores
+    4. Existing tickets remain valid
+    
+    Activity log:
+    ```json
+    {
+      "action": "LOTERIA_UPDATE",
+      "details": {
+        "isActive": false,
+        "sorteosAffected": 45,
+        "description": "Estado cambiado a INACTIVO. Sorteos afectados: 45"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Activate Loteria">
+    **Setting `isActive: true`**
+    
+    Cascade effect:
+    1. Loteria is marked active
+    2. Sorteos previously deactivated by cascade are restored
+    3. Sorteos manually deactivated remain inactive
+    4. Auto-creation resumes (if enabled)
+    
+    Activity log:
+    ```json
+    {
+      "action": "LOTERIA_UPDATE",
+      "details": {
+        "isActive": true,
+        "sorteosAffected": 45,
+        "description": "Estado cambiado a ACTIVO. Sorteos afectados: 45"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Common Update Scenarios
+
+<AccordionGroup>
+  <Accordion title="Add New Draw Time" icon="clock">
+    Add a third daily draw:
+    
+    ```json
+    {
+      "rulesJson": {
+        "drawSchedule": {
+          "frequency": "diario",
+          "times": ["12:55", "18:55", "20:55"]
+        }
+      }
+    }
+    ```
+    
+    Effect:
+    - New sorteos will be created at 20:55
+    - Existing sorteos unchanged
+    - Next seed will include new time
+  </Accordion>
+  
+  <Accordion title="Enable REVENTADO" icon="burst">
+    Turn on REVENTADO feature:
+    
+    ```json
+    {
+      "rulesJson": {
+        "reventadoConfig": {
+          "enabled": true
+        }
+      }
+    }
+    ```
+    
+    Effect:
+    - New sorteos will have `reventadoEnabled: true`
+    - Existing sorteos unchanged
+    - Vendedores can sell REVENTADO bets on new sorteos
+  </Accordion>
+  
+  <Accordion title="Change to 3 Digits" icon="hashtag">
+    Switch from Times (2) to Monazos (3):
+    
+    ```json
+    {
+      "rulesJson": {
+        "digits": 3
+      }
+    }
+    ```
+    
+    <Warning>
+      This is a significant change. Ensure multipliers are updated accordingly.
+    </Warning>
+    
+    Effect:
+    - New sorteos inherit `digits: 3`
+    - Existing sorteos keep their original digits
+    - Winning numbers must be 000-999 for new sorteos
+  </Accordion>
+  
+  <Accordion title="Disable Auto-Creation" icon="ban">
+    Stop automatic sorteo generation:
+    
+    ```json
+    {
+      "rulesJson": {
+        "autoCreateSorteos": false
+      }
+    }
+    ```
+    
+    Effect:
+    - Cron job skips this loteria
+    - Sorteos must be created manually
+    - Useful for irregular or special draws
+  </Accordion>
+</AccordionGroup>
+
+## Partial Updates
+
+<Info>
+  `rulesJson` is merged with existing rules. Only specified fields are updated.
+</Info>
+
+Example: Update only draw times without changing other rules:
+
+```json
+{
+  "rulesJson": {
+    "drawSchedule": {
+      "times": ["14:00", "20:00"]
+    }
+  }
+}
+```
+
+This updates `times` but preserves `frequency`, `digits`, `reventadoConfig`, etc.
+
+## Activity Logging
+
+All updates are logged:
+
+```json
+{
+  "action": "LOTERIA_UPDATE",
+  "targetType": "LOTERIA",
+  "targetId": "loteria-uuid",
+  "details": {
+    "name": "Lotto",
+    "sorteosAffected": 0,
+    "description": "Lotería actualizada: Lotto"
+  }
+}
+```
+
+With cascade:
+
+```json
+{
+  "action": "LOTERIA_UPDATE",
+  "details": {
+    "isActive": false,
+    "sorteosAffected": 45,
+    "sorteosIds": ["sorteo-1", "sorteo-2", "..."],
+    "description": "Estado cambiado a INACTIVO. Sorteos afectados: 45"
+  }
+}
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Preview Before Seeding">
+    After updating `drawSchedule`, use [Preview Schedule](/api/loterias/preview-schedule) to verify changes.
+  </Step>
+  
+  <Step title="Test with Inactive">
+    When making significant changes, set `isActive: false` first to test without affecting vendedores.
+  </Step>
+  
+  <Step title="Update Multipliers">
+    If changing `digits`, also update multiplier values to match the new number range.
+  </Step>
+  
+  <Step title="Communicate Changes">
+    Notify vendedores when changing schedules or enabling/disabling features.
+  </Step>
+</Steps>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Get Loteria" icon="file" href="/api/loterias/get">
+    View current configuration
+  </Card>
+  <Card title="Preview Schedule" icon="calendar" href="/api/loterias/preview-schedule">
+    See effect of schedule changes
+  </Card>
+  <Card title="Seed Sorteos" icon="seedling" href="/api/loterias/seed-sorteos">
+    Generate sorteos with new rules
+  </Card>
+  <Card title="Activity Logs" icon="list" href="/api/activity/logs">
+    View update history
+  </Card>
+</CardGroup>

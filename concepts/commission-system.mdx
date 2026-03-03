@@ -1,0 +1,400 @@
+---
+title: Commission system
+description: Hierarchical commission policies with JSON configuration and priority-based resolution
+---
+
+The Banca Management Backend implements a flexible commission system with JSON-based policies that can be configured at three levels: User, Ventana, and Banca.
+
+## Key Features
+
+<CardGroup cols={3}>
+  <Card title="Hierarchical" icon="layer-group">
+    Three-level priority: USER → VENTANA → BANCA
+  </Card>
+  <Card title="Rule-Based" icon="list">
+    JSON policies with multiple matching rules
+  </Card>
+  <Card title="Immutable" icon="lock">
+    Snapshot captured at ticket creation time
+  </Card>
+  <Card title="Temporal" icon="calendar">
+    Policies with effectiveFrom/effectiveTo dates
+  </Card>
+  <Card title="Graceful" icon="shield">
+    Malformed JSON defaults to 0% commission
+  </Card>
+  <Card title="Auditable" icon="magnifying-glass">
+    Track which rule applied to each bet
+  </Card>
+</CardGroup>
+
+## Policy Structure
+
+Commission policies are stored as JSON with version 1 schema:
+
+```json
+{
+  "version": 1,
+  "effectiveFrom": "2025-01-01T00:00:00.000Z",
+  "effectiveTo": "2025-12-31T23:59:59.999Z",
+  "defaultPercent": 5.0,
+  "rules": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "loteriaId": "uuid-of-loteria",
+      "betType": "NUMERO",
+      "multiplierRange": { "min": 70, "max": 100 },
+      "percent": 8.5
+    },
+    {
+      "id": "auto-generated-uuid",
+      "loteriaId": null,
+      "betType": "REVENTADO",
+      "multiplierRange": { "min": 0, "max": 999 },
+      "percent": 12.0
+    }
+  ]
+}
+```
+
+### Field Descriptions
+
+<ParamField path="version" type="number" required>
+  Policy schema version (currently 1)
+</ParamField>
+
+<ParamField path="effectiveFrom" type="string">
+  ISO 8601 date when policy becomes active (null = no start limit)
+</ParamField>
+
+<ParamField path="effectiveTo" type="string">
+  ISO 8601 date when policy expires (null = no end limit)
+</ParamField>
+
+<ParamField path="defaultPercent" type="number" required>
+  Default commission percentage (0-100) if no rules match
+</ParamField>
+
+<ParamField path="rules" type="array">
+  Array of commission rules evaluated in order
+</ParamField>
+
+### Rule Structure
+
+<ParamField path="id" type="string">
+  Unique identifier for the rule (auto-generated if not provided)
+</ParamField>
+
+<ParamField path="loteriaId" type="string">
+  Specific loteria UUID (null = wildcard, matches any loteria)
+</ParamField>
+
+<ParamField path="betType" type="enum">
+  Bet type: `NUMERO`, `REVENTADO`, or null (wildcard)
+</ParamField>
+
+<ParamField path="multiplierRange" type="object">
+  Range of multipliers: `{ "min": number, "max": number }` (inclusive)
+</ParamField>
+
+<ParamField path="percent" type="number" required>
+  Commission percentage (0-100) for this rule
+</ParamField>
+
+## Resolution Priority
+
+Commission policies are resolved hierarchically with **first match wins**:
+
+<Steps>
+  <Step title="Check User Policy">
+    If the user (vendedor) has a commission policy, evaluate its rules in order.
+    If a rule matches, use that commission percentage.
+  </Step>
+  
+  <Step title="Check Ventana Policy">
+    If no user policy or no matching rule, check the ventana's policy.
+  </Step>
+  
+  <Step title="Check Banca Policy">
+    If no ventana policy or no matching rule, check the banca's policy.
+  </Step>
+  
+  <Step title="Use Default or Zero">
+    If no policies exist or no rules match, use the policy's `defaultPercent` or 0%.
+  </Step>
+</Steps>
+
+### Matching Logic
+
+A rule matches a jugada (bet) if **ALL** conditions are satisfied:
+
+1. **loteriaId** matches (or rule has `null` = wildcard)
+2. **betType** matches (or rule has `null` = wildcard)
+3. **finalMultiplierX** is within `[min, max]` range (inclusive)
+
+**First matching rule in the array wins** - order matters!
+
+## Snapshot Immutability
+
+When a ticket is created, commission details are **captured and frozen** in each jugada:
+
+```typescript
+interface JugadaCommission {
+  commissionPercent: number;      // 0-100
+  commissionAmount: number;       // round2(amount * percent / 100)
+  commissionOrigin: string;       // "USER" | "VENTANA" | "BANCA" | null
+  commissionRuleId: string;       // UUID of the rule that matched
+}
+```
+
+<Info>
+  Commission snapshots ensure consistent payouts even if policies change after ticket creation.
+</Info>
+
+### Example Snapshot
+
+```json
+{
+  "id": "jugada-uuid",
+  "ticketId": "ticket-uuid",
+  "number": "42",
+  "amount": 100.00,
+  "betType": "NUMERO",
+  "finalMultiplierX": 80,
+  "commissionPercent": 8.5,
+  "commissionAmount": 8.50,
+  "commissionOrigin": "USER",
+  "commissionRuleId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+## Managing Policies
+
+Only **ADMIN** users can create or update commission policies via the API.
+
+### Set Banca Policy
+
+```bash
+curl -X PUT http://localhost:4000/api/v1/bancas/{bancaId}/commission-policy \
+  -H "Authorization: Bearer {accessToken}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "version": 1,
+    "defaultPercent": 5.0,
+    "effectiveFrom": null,
+    "effectiveTo": null,
+    "rules": [
+      {
+        "loteriaId": null,
+        "betType": null,
+        "multiplierRange": { "min": 0, "max": 999 },
+        "percent": 5.0
+      }
+    ]
+  }'
+```
+
+### Set Ventana Policy
+
+```bash
+curl -X PUT http://localhost:4000/api/v1/ventanas/{ventanaId}/commission-policy \
+  -H "Authorization: Bearer {accessToken}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "version": 1,
+    "defaultPercent": 7.0,
+    "rules": [
+      {
+        "loteriaId": "specific-loteria-uuid",
+        "betType": "NUMERO",
+        "multiplierRange": { "min": 70, "max": 100 },
+        "percent": 10.0
+      }
+    ]
+  }'
+```
+
+### Set User Policy
+
+```bash
+curl -X PUT http://localhost:4000/api/v1/users/{userId}/commission-policy \
+  -H "Authorization: Bearer {accessToken}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "version": 1,
+    "defaultPercent": 12.0,
+    "rules": [
+      {
+        "betType": "REVENTADO",
+        "multiplierRange": { "min": 0, "max": 999 },
+        "percent": 15.0
+      }
+    ]
+  }'
+```
+
+### Get Policy
+
+```bash
+# Get banca policy
+curl http://localhost:4000/api/v1/bancas/{bancaId}/commission-policy \
+  -H "Authorization: Bearer {accessToken}"
+
+# Get ventana policy
+curl http://localhost:4000/api/v1/ventanas/{ventanaId}/commission-policy \
+  -H "Authorization: Bearer {accessToken}"
+
+# Get user policy
+curl http://localhost:4000/api/v1/users/{userId}/commission-policy \
+  -H "Authorization: Bearer {accessToken}"
+```
+
+## Analytics Integration
+
+Commission metrics are included in sales analytics endpoints:
+
+### Sales Summary
+
+```bash
+curl "http://localhost:4000/api/v1/ventas/summary?fromDate=2025-03-01&toDate=2025-03-31" \
+  -H "Authorization: Bearer {accessToken}"
+```
+
+**Response includes:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "totalSales": 100000.00,
+    "totalPayout": 60000.00,
+    "commissionTotal": 8500.00,
+    "netAfterCommission": 91500.00,
+    "netRevenue": 31500.00
+  }
+}
+```
+
+### Sales Breakdown by Dimension
+
+```bash
+curl "http://localhost:4000/api/v1/ventas/breakdown?dimension=ventana&fromDate=2025-03-01" \
+  -H "Authorization: Bearer {accessToken}"
+```
+
+**Response includes commission per ventana:**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "ventanaId": "uuid-1",
+      "ventanaName": "Ventana Central",
+      "totalSales": 50000.00,
+      "commissionTotal": 4250.00
+    },
+    {
+      "ventanaId": "uuid-2",
+      "ventanaName": "Ventana Norte",
+      "totalSales": 50000.00,
+      "commissionTotal": 4250.00
+    }
+  ]
+}
+```
+
+### Time Series with Commission
+
+```bash
+curl "http://localhost:4000/api/v1/ventas/timeseries?granularity=day&fromDate=2025-03-01&toDate=2025-03-07" \
+  -H "Authorization: Bearer {accessToken}"
+```
+
+**Response includes daily commission totals:**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "timestamp": "2025-03-01T00:00:00.000Z",
+      "totalSales": 15000.00,
+      "commissionTotal": 1275.00
+    },
+    {
+      "timestamp": "2025-03-02T00:00:00.000Z",
+      "totalSales": 18000.00,
+      "commissionTotal": 1530.00
+    }
+  ]
+}
+```
+
+## Error Handling
+
+<Warning>
+  **Graceful Degradation:** If a commission policy JSON is malformed or invalid, the system logs a warning and applies **0% commission** instead of blocking ticket creation.
+</Warning>
+
+This ensures that technical issues with policies don't prevent sales operations.
+
+### Validation Errors
+
+- Invalid JSON structure → 0% commission + warning log
+- Missing required fields → 0% commission + warning log
+- Invalid percentage values (< 0 or > 100) → Clamped to 0-100
+- Invalid multiplier ranges → Rule skipped
+
+## Best Practices
+
+<Accordion title="Order rules from specific to general">
+  Place more specific rules (with multiple conditions) first in the array:
+  
+  ```json
+  {
+    "rules": [
+      // Specific: Loteria A + NUMERO + High multiplier
+      { "loteriaId": "...", "betType": "NUMERO", "multiplierRange": { "min": 80, "max": 100 }, "percent": 12 },
+      
+      // Less specific: Any NUMERO
+      { "betType": "NUMERO", "multiplierRange": { "min": 0, "max": 999 }, "percent": 8 },
+      
+      // Catch-all: Any bet
+      { "loteriaId": null, "betType": null, "multiplierRange": { "min": 0, "max": 999 }, "percent": 5 }
+    ]
+  }
+  ```
+</Accordion>
+
+<Accordion title="Use temporal policies for promotions">
+  Set `effectiveFrom` and `effectiveTo` for time-limited commission changes:
+  
+  ```json
+  {
+    "effectiveFrom": "2025-03-01T00:00:00.000Z",
+    "effectiveTo": "2025-03-31T23:59:59.999Z",
+    "defaultPercent": 10.0,
+    "rules": [...]
+  }
+  ```
+</Accordion>
+
+<Accordion title="Test policies before deploying">
+  Create test tickets to verify commission calculations match expectations. Review commission snapshots in ticket details.
+</Accordion>
+
+<Accordion title="Document rule IDs for audit trails">
+  Use meaningful UUIDs or generate UUIDs and keep a mapping for later reference when analyzing commission data.
+</Accordion>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Ticket Creation" icon="ticket" href="/guides/ticket-creation">
+    How tickets capture commission snapshots
+  </Card>
+  <Card title="Analytics API" icon="chart-bar" href="/guides/analytics">
+    View commission metrics in reports
+  </Card>
+</CardGroup>

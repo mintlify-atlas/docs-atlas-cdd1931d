@@ -1,0 +1,158 @@
+---
+title: 'List Bancas'
+api: 'GET /api/v1/bancas'
+description: 'Retrieve a paginated list of bancas. Accessible by all authenticated users.'
+---
+
+## Overview
+
+Retrieves a paginated list of bancas with optional filtering. Results are automatically filtered based on user role and permissions.
+
+## Authorization
+
+<Info>**Required:** Valid JWT token (all authenticated users)</Info>
+
+## Query Parameters
+
+<ParamField query="page" type="number" default="1">
+  Page number (must be positive integer)
+</ParamField>
+
+<ParamField query="pageSize" type="number" default="20">
+  Number of items per page (1-100)
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search term to filter bancas (2-100 characters). Searches across name, code, email, phone, and address fields.
+</ParamField>
+
+<ParamField query="isActive" type="boolean">
+  Filter by active status
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of banca objects
+  
+  <Expandable title="Banca object">
+    <ResponseField name="id" type="string">
+      UUID of the banca
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Banca name
+    </ResponseField>
+    
+    <ResponseField name="code" type="string">
+      Unique banca code
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Contact email
+    </ResponseField>
+    
+    <ResponseField name="address" type="string">
+      Physical address
+    </ResponseField>
+    
+    <ResponseField name="phone" type="string">
+      Contact phone
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Active status
+    </ResponseField>
+    
+    <ResponseField name="defaultMinBet" type="number">
+      Default minimum bet
+    </ResponseField>
+    
+    <ResponseField name="globalMaxPerNumber" type="number">
+      Global max per number
+    </ResponseField>
+    
+    <ResponseField name="salesCutoffMinutes" type="number">
+      Sales cutoff time in minutes
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Pagination metadata
+  
+  <Expandable title="Meta object">
+    <ResponseField name="page" type="number">
+      Current page number
+    </ResponseField>
+    
+    <ResponseField name="pageSize" type="number">
+      Items per page
+    </ResponseField>
+    
+    <ResponseField name="total" type="number">
+      Total number of items
+    </ResponseField>
+    
+    <ResponseField name="totalPages" type="number">
+      Total number of pages
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "success": true,
+  "data": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Banca Central",
+      "code": "BC001",
+      "email": "contact@bancacentral.com",
+      "address": "123 Main Street",
+      "phone": "+1-234-567-8900",
+      "isActive": true,
+      "defaultMinBet": 100,
+      "globalMaxPerNumber": 5000,
+      "salesCutoffMinutes": 1,
+      "createdAt": "2024-03-15T10:30:00Z",
+      "updatedAt": "2024-03-15T10:30:00Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "pageSize": 20,
+    "total": 1,
+    "totalPages": 1
+  }
+}
+```
+
+```json 401 - Unauthorized
+{
+  "success": false,
+  "error": "Unauthorized",
+  "message": "Authentication required"
+}
+```
+</ResponseExample>
+
+## Notes
+
+- Results automatically filtered based on user role (see src/api/v1/controllers/banca.controller.ts:29-36)
+- Search performs fuzzy matching across multiple fields
+- Soft-deleted bancas are excluded unless explicitly requested
+- Response includes full-text search capabilities using PostgreSQL trigram indexes

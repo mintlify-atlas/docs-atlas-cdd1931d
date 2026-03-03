@@ -1,80 +1,367 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Get started with the Banca Management Backend in minutes - installation, configuration, and your first authenticated API request
 ---
 
-## Get started in three steps
+# Quick Start Guide
 
-Get your documentation site running locally and make your first customization.
+This guide will help you set up and run the Banca Management Backend locally, configure your environment, and make your first authenticated API request.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+Before you begin, ensure you have the following installed:
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+<CardGroup cols={3}>
+  <Card title="Node.js" icon="node-js">
+    **Version 20.x** required
+  </Card>
+  
+  <Card title="PostgreSQL" icon="database">
+    **Version 14+** recommended
+  </Card>
+  
+  <Card title="Redis" icon="bolt">
+    **Optional** for caching
+  </Card>
 </CardGroup>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  The project uses Prisma ORM which requires a PostgreSQL database. For production, Supabase with transaction pooler (port 6543) is recommended.
 </Note>
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone <repository-url>
+    cd backend-bancas
+    ```
+  </Step>
+  
+  <Step title="Install dependencies">
+    ```bash
+    npm install
+    ```
+    
+    This will install all required packages including:
+    - Express.js and middleware (cors, helmet, express-rate-limit)
+    - Prisma Client and CLI
+    - Authentication (jsonwebtoken, bcryptjs)
+    - Validation (zod)
+    - Logging (pino)
+    - Testing (jest, supertest)
+  </Step>
+  
+  <Step title="Configure environment variables">
+    Create a `.env.local` file in the root directory based on `.env.example`:
+    
+    ```bash
+    cp .env.example .env.local
+    ```
+    
+    Edit `.env.local` with your configuration (see Environment Configuration below).
+  </Step>
+  
+  <Step title="Set up the database">
+    Generate Prisma Client and run migrations:
+    
+    ```bash
+    npm run prisma:generate
+    npm run migrate:dev
+    ```
+    
+    <Warning>
+      For Supabase/PgBouncer environments, use `npm run migrate:deploy` instead of `migrate:dev` as shadow database is disabled.
+    </Warning>
+  </Step>
+  
+  <Step title="Seed initial data (optional)">
+    ```bash
+    npm run prisma:seed
+    ```
+    
+    This creates initial bancas, ventanas, users, and lottery configurations for testing.
+  </Step>
+  
+  <Step title="Start the development server">
+    ```bash
+    npm run dev
+    ```
+    
+    The server will start on `http://localhost:3000` (or the PORT specified in your .env file).
+  </Step>
+</Steps>
+
+## Environment Configuration
+
+The `.env.local` file contains critical configuration. Here are the essential variables:
+
+### Server Configuration
+
+```bash
+NODE_ENV=development
+PORT=3000
+LOG_LEVEL=info
+DISABLE_AUTH=false  # Set to true only for development/testing
+CORS_ORIGIN=        # Comma-separated list of allowed origins
+```
+
+### Database URLs
+
+<Info>
+  The system supports three database connection strings for optimal performance:
+</Info>
+
+```bash
+# Transaction Pooler (port 6543) - For web requests
+DATABASE_URL=postgresql://user:pass@host.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1
+
+# Session Pooler (port 5432) - For migrations and long operations
+DIRECT_URL=postgresql://user:pass@host.supabase.co:5432/postgres
+
+# Read Replica (port 5432) - Optional, for analytics queries
+DATABASE_URL_REPLICA=postgresql://postgres.PROJECT_REF-rr-REGION:pass@aws-X-REGION.pooler.supabase.com:5432/postgres
+```
+
+<Note>
+  If `DATABASE_URL_REPLICA` is not configured, the system automatically falls back to the primary `DATABASE_URL` for read queries.
+</Note>
+
+### JWT Configuration
+
+```bash
+JWT_ACCESS_SECRET=your-super-secret-access-key-here
+JWT_REFRESH_SECRET=your-super-secret-refresh-key-here
+JWT_ACCESS_EXPIRES_IN=60m
+JWT_REFRESH_EXPIRES_IN=7d
+```
+
+<Warning>
+  Generate strong, unique secrets for production! Never commit these values to version control.
+</Warning>
+
+### Business Rules
+
+```bash
+SALES_DAILY_MAX=100000
+MULTIPLIER_BASE_DEFAULT_X=90
+```
+
+### Redis Cache (Optional)
+
+```bash
+CACHE_ENABLED=false
+REDIS_URL=redis://localhost:6379
+REDIS_TOKEN=
+CACHE_TTL_CUTOFF=300
+CACHE_TTL_RESTRICTIONS=300
+```
+
+### Transaction Settings
+
+```bash
+TX_MAX_RETRIES=3
+TX_BACKOFF_MIN_MS=250
+TX_BACKOFF_MAX_MS=600
+```
+
+## Making Your First API Request
+
+Once the server is running, you can interact with the API. Here's how to authenticate and make your first request.
+
+### 1. Register a User
+
+```bash
+POST /api/v1/auth/register
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "SecurePass123!",
+  "name": "Admin User",
+  "email": "admin@example.com",
+  "role": "ADMIN"
+}
+```
+
+<Note>
+  For development, you can set `DISABLE_AUTH=true` in your `.env.local` to bypass authentication and simulate an ADMIN user.
+</Note>
+
+### 2. Login
+
+```bash
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "SecurePass123!"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": "uuid-here",
+      "username": "admin",
+      "name": "Admin User",
+      "role": "ADMIN",
+      "email": "admin@example.com"
+    }
+  }
+}
+```
+
+### 3. Access Protected Endpoints
+
+Use the `accessToken` from the login response in the `Authorization` header:
+
+```bash
+GET /api/v1/auth/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid-here",
+    "username": "admin",
+    "name": "Admin User",
+    "role": "ADMIN",
+    "email": "admin@example.com",
+    "ventanaId": null,
+    "isActive": true
+  }
+}
+```
+
+### 4. Explore Available Routes
+
+Here are some key endpoints to explore:
+
+<CodeGroup>
+```bash Authentication
+# Get current user
+GET /api/v1/auth/me
+
+# Refresh access token
+POST /api/v1/auth/refresh
+
+# Logout
+POST /api/v1/auth/logout
+```
+
+```bash Lotteries
+# List lotteries
+GET /api/v1/loterias
+
+# Create lottery
+POST /api/v1/loterias
+
+# Preview draw schedule
+GET /api/v1/loterias/:id/preview_schedule?start=2025-01-01&days=7
+```
+
+```bash Tickets
+# List tickets
+GET /api/v1/tickets
+
+# Create ticket
+POST /api/v1/tickets
+
+# Get ticket by number
+GET /api/v1/tickets/number/:ticketNumber
+```
+
+```bash Analytics
+# Dashboard KPIs
+GET /api/v1/admin/dashboard
+
+# Sales summary
+GET /api/v1/ventas/summary?fromDate=2025-01-01&toDate=2025-01-31
+
+# Time series data
+GET /api/v1/ventas/timeseries?granularity=day
+```
+</CodeGroup>
+
+## Development Scripts
+
+The project includes several useful npm scripts:
+
+```bash
+# Development
+npm run dev              # Start with hot reload
+npm run build            # Compile TypeScript
+npm run typecheck        # Type check without emit
+
+# Database
+npm run prisma:generate  # Generate Prisma Client
+npm run migrate:dev      # Run migrations (development)
+npm run migrate:deploy   # Deploy migrations (production)
+npm run prisma:seed      # Seed database
+npm run studio           # Open Prisma Studio
+
+# Testing
+npm run test             # Run tests
+npm run test:watch       # Run tests in watch mode
+npm run test:coverage    # Generate coverage report
+
+# Production
+npm run start            # Start production server
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="System Architecture" icon="sitemap" href="/architecture">
+    Learn about the layered architecture, data models, and request flow
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api-reference">
+    Explore detailed API documentation for all endpoints
+  </Card>
+  
+  <Card title="Authentication" icon="key" href="/authentication">
+    Deep dive into JWT auth, roles, and security
+  </Card>
+  
+  <Card title="Commission System" icon="percent" href="/commissions">
+    Configure hierarchical commission policies
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Migration errors with Supabase/PgBouncer">
+    Use `npm run migrate:deploy` instead of `migrate:dev`. Shadow database is disabled for PgBouncer compatibility.
+  </Accordion>
+  
+  <Accordion title="JWT token errors">
+    Ensure your `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` are set and match between requests. Check token expiration settings.
+  </Accordion>
+  
+  <Accordion title="CORS errors from frontend">
+    Add your frontend origin to the `CORS_ORIGIN` environment variable (comma-separated for multiple origins).
+  </Accordion>
+  
+  <Accordion title="Database connection timeouts">
+    For Supabase, verify you're using the correct pooler port (6543 for transaction pooler, 5432 for session pooler). Check connection limits.
+  </Accordion>
+</AccordionGroup>
+
+<Info>
+  Need help? Contact the maintainer at [mquirosp78@gmail.com](mailto:mquirosp78@gmail.com)
+</Info>

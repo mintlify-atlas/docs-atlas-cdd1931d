@@ -1,0 +1,143 @@
+---
+title: 'Get Banca'
+api: 'GET /api/v1/bancas/:id'
+description: 'Retrieve a specific banca by ID. Accessible by all authenticated users.'
+---
+
+## Overview
+
+Retrieves detailed information about a specific banca.
+
+## Authorization
+
+<Info>**Required:** Valid JWT token (all authenticated users)</Info>
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the banca to retrieve
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The banca object
+  
+  <Expandable title="Banca object">
+    <ResponseField name="id" type="string">
+      UUID of the banca
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Banca name
+    </ResponseField>
+    
+    <ResponseField name="code" type="string">
+      Unique banca code
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Contact email
+    </ResponseField>
+    
+    <ResponseField name="address" type="string">
+      Physical address
+    </ResponseField>
+    
+    <ResponseField name="phone" type="string">
+      Contact phone
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Active status
+    </ResponseField>
+    
+    <ResponseField name="defaultMinBet" type="number">
+      Default minimum bet
+    </ResponseField>
+    
+    <ResponseField name="globalMaxPerNumber" type="number">
+      Global max per number
+    </ResponseField>
+    
+    <ResponseField name="salesCutoffMinutes" type="number">
+      Sales cutoff time in minutes
+    </ResponseField>
+    
+    <ResponseField name="deletedAt" type="string">
+      Soft delete timestamp (null if active)
+    </ResponseField>
+    
+    <ResponseField name="deletedBy" type="string">
+      User ID who deleted this banca (null if active)
+    </ResponseField>
+    
+    <ResponseField name="deletedReason" type="string">
+      Reason for deletion (null if active)
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Banca Central",
+    "code": "BC001",
+    "email": "contact@bancacentral.com",
+    "address": "123 Main Street",
+    "phone": "+1-234-567-8900",
+    "isActive": true,
+    "defaultMinBet": 100,
+    "globalMaxPerNumber": 5000,
+    "salesCutoffMinutes": 1,
+    "deletedAt": null,
+    "deletedBy": null,
+    "deletedReason": null,
+    "createdAt": "2024-03-15T10:30:00Z",
+    "updatedAt": "2024-03-15T10:30:00Z"
+  }
+}
+```
+
+```json 404 - Not Found
+{
+  "success": false,
+  "error": "Not Found",
+  "message": "Banca not found"
+}
+```
+
+```json 400 - Invalid ID
+{
+  "success": false,
+  "error": "Validation failed",
+  "details": [
+    {
+      "field": "id",
+      "message": "id inválido (UUID)"
+    }
+  ]
+}
+```
+</ResponseExample>
+
+## Notes
+
+- ID must be a valid UUID format
+- Returns 404 if banca is soft-deleted
+- Implementation: src/api/v1/controllers/banca.controller.ts:42

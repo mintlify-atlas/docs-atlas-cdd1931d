@@ -1,0 +1,170 @@
+---
+title: Activity Logs
+api: GET /api/v1/activity-logs
+description: List activity logs with filtering and pagination
+---
+
+## Overview
+
+Returns paginated list of activity logs for audit and monitoring. Supports filtering by user, action, target, and date range.
+
+## Authentication
+
+Requires JWT authentication with **ADMIN** role only.
+
+## Query Parameters
+
+<ParamField query="page" type="number" default="1">
+  Page number (min: 1)
+</ParamField>
+
+<ParamField query="pageSize" type="number" default="10">
+  Items per page (min: 1)
+</ParamField>
+
+<ParamField query="userId" type="string">
+  Filter by user ID (UUID)
+</ParamField>
+
+<ParamField query="action" type="enum">
+  Filter by action type (see ActivityType enum)
+</ParamField>
+
+<ParamField query="targetType" type="string">
+  Filter by target entity type (e.g., `TICKET`, `USER`, `ACCOUNT_PAYMENT`)
+</ParamField>
+
+<ParamField query="targetId" type="string">
+  Filter by target entity ID
+</ParamField>
+
+<ParamField query="startDate" type="string">
+  Start date in ISO 8601 format (e.g., `2024-03-01T00:00:00Z`)
+</ParamField>
+
+<ParamField query="endDate" type="string">
+  End date in ISO 8601 format
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search in action details (free text)
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="array">
+  Activity log entries
+  
+  <Expandable title="Log entry">
+    <ResponseField name="id" type="string">Log ID</ResponseField>
+    <ResponseField name="userId" type="string">User who performed action</ResponseField>
+    <ResponseField name="action" type="string">Action type (enum value)</ResponseField>
+    <ResponseField name="targetType" type="string">Target entity type</ResponseField>
+    <ResponseField name="targetId" type="string">Target entity ID</ResponseField>
+    <ResponseField name="details" type="object">Action-specific details (JSON)</ResponseField>
+    <ResponseField name="ipAddress" type="string">User IP address</ResponseField>
+    <ResponseField name="userAgent" type="string">User agent string</ResponseField>
+    <ResponseField name="layer" type="string">Application layer: `controller`, `service`, `repository`</ResponseField>
+    <ResponseField name="requestId" type="string">Request correlation ID</ResponseField>
+    <ResponseField name="createdAt" type="string">ISO 8601 timestamp</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Pagination metadata
+  
+  <Expandable title="properties">
+    <ResponseField name="page" type="number">Current page</ResponseField>
+    <ResponseField name="pageSize" type="number">Items per page</ResponseField>
+    <ResponseField name="totalPages" type="number">Total pages</ResponseField>
+    <ResponseField name="totalItems" type="number">Total items</ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Activity Types
+
+Common action types include:
+- `TICKET_CREATE`, `TICKET_PAY`, `TICKET_CANCEL`
+- `ACCOUNT_PAYMENT_CREATE`, `ACCOUNT_PAYMENT_REVERSE`
+- `USER_LOGIN`, `USER_CREATE`, `USER_UPDATE`
+- `SORTEO_CREATE`, `SORTEO_EVALUATE`
+
+## Example Request
+
+```bash
+GET /api/v1/activity-logs?userId=abc-123&action=TICKET_PAY&page=1&pageSize=20
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "log-001",
+      "userId": "abc-123",
+      "action": "TICKET_PAY",
+      "targetType": "TICKET_PAYMENT",
+      "targetId": "payment-456",
+      "details": {
+        "created": true,
+        "cached": false,
+        "amount": 50000
+      },
+      "ipAddress": "192.168.1.100",
+      "userAgent": "Mozilla/5.0...",
+      "layer": "controller",
+      "requestId": "req-789",
+      "createdAt": "2024-03-15T10:30:00.000Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "pageSize": 20,
+    "totalPages": 5,
+    "totalItems": 95
+  }
+}
+```
+
+## Additional Endpoints
+
+### Get by User
+
+```http
+GET /api/v1/activity-logs/user/:userId?page=1&pageSize=20
+```
+
+Get all logs for a specific user.
+
+### Get by Target
+
+```http
+GET /api/v1/activity-logs/target/:targetType/:targetId?page=1&pageSize=20
+```
+
+Get all logs for a specific entity.
+
+### Get by Action
+
+```http
+GET /api/v1/activity-logs/action/:action?page=1&pageSize=20
+```
+
+Get all logs for a specific action type.
+
+### Cleanup Old Logs
+
+```http
+POST /api/v1/activity-logs/cleanup
+```
+
+Request body:
+```json
+{
+  "days": 45
+}
+```
+
+Deletes activity logs older than specified days (default: 45).

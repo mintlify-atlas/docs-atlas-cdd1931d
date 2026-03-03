@@ -1,0 +1,110 @@
+---
+title: Sales Summary
+api: GET /api/v1/ventas/summary
+description: Get executive summary of sales with KPIs
+---
+
+## Overview
+
+Returns executive summary with key performance indicators for sales in the specified date range. Applies RBAC filtering by user role.
+
+## Authentication
+
+Requires JWT authentication:
+- **VENDEDOR**: Can only see own sales (`scope=mine` forced)
+- **VENTANA**: Can see window or seller data
+- **ADMIN**: Can see all data or filter by banca
+
+## Query Parameters
+
+<ParamField query="date" type="enum" default="today">
+  Date range: `today`, `yesterday`, `week`, `month`, `year`, `range`
+</ParamField>
+
+<ParamField query="fromDate" type="string">
+  Start date `YYYY-MM-DD` (required if `date=range`)
+</ParamField>
+
+<ParamField query="toDate" type="string">
+  End date `YYYY-MM-DD` (required if `date=range`)
+</ParamField>
+
+<ParamField query="ventanaId" type="string">
+  Filter by ventana (admin only)
+</ParamField>
+
+<ParamField query="vendedorId" type="string">
+  Filter by seller
+</ParamField>
+
+<ParamField query="loteriaId" type="string">
+  Filter by lottery
+</ParamField>
+
+<ParamField query="scope" type="enum">
+  Data scope: `all`, `mine`
+</ParamField>
+
+## Response
+
+<ResponseField name="totalSales" type="number">
+  Total sales amount
+</ResponseField>
+
+<ResponseField name="totalPayouts" type="number">
+  Total payouts
+</ResponseField>
+
+<ResponseField name="totalTickets" type="number">
+  Number of tickets sold
+</ResponseField>
+
+<ResponseField name="totalWinners" type="number">
+  Number of winning tickets
+</ResponseField>
+
+<ResponseField name="netRevenue" type="number">
+  Net revenue (sales - payouts)
+</ResponseField>
+
+<ResponseField name="winRate" type="number">
+  Win rate percentage
+</ResponseField>
+
+<ResponseField name="avgTicketValue" type="number">
+  Average ticket value
+</ResponseField>
+
+## Example Request
+
+```bash
+GET /api/v1/ventas/summary?date=today&scope=all
+```
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "totalSales": 1500000,
+    "totalPayouts": 800000,
+    "totalTickets": 1234,
+    "totalWinners": 89,
+    "netRevenue": 700000,
+    "winRate": 7.21,
+    "avgTicketValue": 1215.80
+  },
+  "meta": {
+    "range": {
+      "fromAt": "2024-03-15T06:00:00.000Z",
+      "toAt": "2024-03-16T05:59:59.999Z",
+      "tz": "America/Costa_Rica"
+    },
+    "effectiveFilters": {
+      "ventanaId": null,
+      "vendedorId": null
+    }
+  }
+}
+```
