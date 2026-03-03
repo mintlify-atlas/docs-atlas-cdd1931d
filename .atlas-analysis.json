@@ -1,0 +1,237 @@
+{
+  "projectType": "api-service",
+  "projectName": "Banca Management Backend",
+  "projectDescription": "Backend API for managing lottery ticket sales, draws, commissions, and payment tracking with hierarchical RBAC and real-time analytics",
+  "theme": "sequoia",
+  "primaryColor": "#2563eb",
+  "lightColor": "#3b82f6",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "architecture"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/authentication",
+              "concepts/roles-permissions",
+              "concepts/timezone-handling",
+              "concepts/commission-system",
+              "concepts/multipliers"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/ticket-creation",
+              "guides/sorteo-management",
+              "guides/restriction-rules",
+              "guides/payments",
+              "guides/analytics"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": [
+              "operations/deployment",
+              "operations/database-migrations",
+              "operations/monitoring",
+              "operations/jobs"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/auth/login",
+              "api/auth/refresh",
+              "api/auth/logout"
+            ]
+          },
+          {
+            "group": "Tickets",
+            "pages": [
+              "api/tickets/create",
+              "api/tickets/list",
+              "api/tickets/get",
+              "api/tickets/cancel"
+            ]
+          },
+          {
+            "group": "Sorteos (Draws)",
+            "pages": [
+              "api/sorteos/create",
+              "api/sorteos/list",
+              "api/sorteos/get",
+              "api/sorteos/update",
+              "api/sorteos/open",
+              "api/sorteos/close",
+              "api/sorteos/evaluate"
+            ]
+          },
+          {
+            "group": "Loterias",
+            "pages": [
+              "api/loterias/create",
+              "api/loterias/list",
+              "api/loterias/get",
+              "api/loterias/update",
+              "api/loterias/preview-schedule",
+              "api/loterias/seed-sorteos"
+            ]
+          },
+          {
+            "group": "Bancas & Ventanas",
+            "pages": [
+              "api/bancas/create",
+              "api/bancas/list",
+              "api/bancas/get",
+              "api/bancas/update",
+              "api/ventanas/create",
+              "api/ventanas/list",
+              "api/ventanas/get",
+              "api/ventanas/update"
+            ]
+          },
+          {
+            "group": "Users & Vendedores",
+            "pages": [
+              "api/users/create",
+              "api/users/list",
+              "api/users/get",
+              "api/users/update",
+              "api/vendedores/list",
+              "api/vendedores/get"
+            ]
+          },
+          {
+            "group": "Commissions",
+            "pages": [
+              "api/commissions/get-policy",
+              "api/commissions/set-policy",
+              "api/commissions/analytics"
+            ]
+          },
+          {
+            "group": "Restrictions & Rules",
+            "pages": [
+              "api/restrictions/create",
+              "api/restrictions/list",
+              "api/restrictions/get",
+              "api/restrictions/update",
+              "api/restrictions/delete"
+            ]
+          },
+          {
+            "group": "Multipliers",
+            "pages": [
+              "api/multipliers/create",
+              "api/multipliers/list",
+              "api/multipliers/get",
+              "api/multipliers/update",
+              "api/multipliers/overrides"
+            ]
+          },
+          {
+            "group": "Payments",
+            "pages": [
+              "api/payments/pay-ticket",
+              "api/payments/reverse-payment",
+              "api/payments/finalize-payment"
+            ]
+          },
+          {
+            "group": "Analytics & Reports",
+            "pages": [
+              "api/analytics/dashboard",
+              "api/analytics/timeseries",
+              "api/analytics/exposure",
+              "api/analytics/vendedores",
+              "api/reports/ventas-summary",
+              "api/reports/ventas-breakdown",
+              "api/reports/export"
+            ]
+          },
+          {
+            "group": "Accounts",
+            "pages": [
+              "api/accounts/statements",
+              "api/accounts/payments",
+              "api/accounts/settlements"
+            ]
+          },
+          {
+            "group": "Activity & Audit",
+            "pages": [
+              "api/activity/logs",
+              "api/activity/search"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "JWT-based authentication with role-based access control (ADMIN, VENTANA, VENDEDOR)",
+    "Hierarchical lottery ticket management with Banca → Ventana → Vendedor structure",
+    "Automated sorteo (draw) scheduling and lifecycle management (SCHEDULED → OPEN → CLOSED → EVALUATED)",
+    "Flexible commission system with JSON policies and priority-based resolution",
+    "Real-time sales analytics and financial exposure tracking with dashboard APIs",
+    "Restriction rules for betting limits with temporal and hierarchical enforcement",
+    "Configurable multipliers with user/ventana overrides and snapshot immutability",
+    "Payment tracking for winning tickets with partial payments and reversal support",
+    "Transaction-safe ticket creation with deadlock handling and retry mechanisms",
+    "Comprehensive activity logging and audit trail for all critical operations",
+    "Costa Rica timezone (GMT-6) handling with UTC storage and local display",
+    "Redis caching for performance optimization with automatic cache warming",
+    "Automated jobs for sorteo automation, account settlements, and monthly closures"
+  ],
+  "publicApiSurface": [
+    "POST /api/v1/auth/login - Authenticate user and obtain JWT tokens",
+    "POST /api/v1/auth/refresh - Refresh access token using refresh token",
+    "POST /api/v1/tickets - Create lottery ticket with jugadas (bets)",
+    "GET /api/v1/tickets - List tickets with RBAC filtering and pagination",
+    "GET /api/v1/tickets/:id - Get ticket details with jugadas and payment status",
+    "POST /api/v1/tickets/:id/cancel - Cancel ticket with audit trail",
+    "POST /api/v1/tickets/:id/pay - Register payment for winning ticket",
+    "POST /api/v1/sorteos - Create new sorteo (draw)",
+    "GET /api/v1/sorteos - List sorteos with filters (status, loteria, date range)",
+    "PATCH /api/v1/sorteos/:id/open - Transition sorteo to OPEN state",
+    "PATCH /api/v1/sorteos/:id/close - Transition sorteo to CLOSED state",
+    "PATCH /api/v1/sorteos/:id/evaluate - Evaluate sorteo with winning number",
+    "POST /api/v1/loterias - Create lottery with rulesJson configuration",
+    "GET /api/v1/loterias/:id/preview_schedule - Preview scheduled sorteos",
+    "POST /api/v1/loterias/:id/seed_sorteos - Generate sorteos from schedule",
+    "GET /api/v1/ventas/summary - Sales summary with commission and payment metrics",
+    "GET /api/v1/ventas/breakdown - Sales breakdown by dimension (ventana, loteria, vendedor)",
+    "GET /api/v1/ventas/timeseries - Time-series sales data with hourly/daily granularity",
+    "GET /api/v1/admin/dashboard - Dashboard KPIs with alerts and comparisons",
+    "GET /api/v1/admin/dashboard/timeseries - Time-series analytics for dashboard",
+    "GET /api/v1/admin/dashboard/exposure - Financial exposure analysis by number",
+    "POST /api/v1/restrictions - Create restriction rules with hierarchical priority",
+    "GET /api/v1/restrictions - List restriction rules with filtering",
+    "PUT /api/v1/bancas/:id/commission-policy - Set commission policy for banca",
+    "PUT /api/v1/ventanas/:id/commission-policy - Set commission policy for ventana",
+    "PUT /api/v1/users/:id/commission-policy - Set commission policy for user",
+    "POST /api/v1/multipliers - Create loteria multiplier",
+    "GET /api/v1/multipliers - List multipliers with filters",
+    "POST /api/v1/multiplier-overrides - Create user multiplier override",
+    "GET /api/v1/activity-logs - Get activity logs with search and filtering",
+    "GET /api/v1/accounts/statements - List account statements",
+    "POST /api/v1/accounts/payments - Record account payment",
+    "POST /api/v1/cierres - Trigger manual account closing"
+  ]
+}
