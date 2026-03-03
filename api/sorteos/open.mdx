@@ -107,19 +107,11 @@ curl -X PATCH https://api.example.com/api/v1/sorteos/7c9e6679-7425-40de-944b-e07
 
 ## Alternative: Force Open
 
-For reopening sorteos from other states, use:
+For reopening sorteos from other states, see the Update endpoint for advanced options.
 
-<Card title="Force Open" icon="door-open" href="/api/sorteos/force-open">
-  Forcefully open a sorteo from any non-evaluated state
-</Card>
-
-## Alternative: Activate and Open
-
-To activate and open in a single operation:
-
-<Card title="Activate and Open" icon="bolt" href="/api/sorteos/activate-and-open">
-  Reactivate an inactive sorteo and open it immediately
-</Card>
+<Note>
+  Additional endpoints like force-open and activate-and-open are available but not yet documented. These allow forcefully opening sorteos from any non-evaluated state or reactivating inactive sorteos.
+</Note>
 
 ## What Happens When Opening?
 
@@ -238,8 +230,8 @@ stateDiagram-v2
   <Card title="Evaluate Sorteo" icon="calculator" href="/api/sorteos/evaluate">
     Set winning number and evaluate
   </Card>
-  <Card title="Force Open" icon="door-open" href="/api/sorteos/force-open">
-    Reopen from CLOSED status
+  <Card title="Update Sorteo" icon="pen" href="/api/sorteos/update">
+    Modify sorteo configuration
   </Card>
   <Card title="Create Ticket" icon="ticket" href="/api/tickets/create">
     Create a ticket for open sorteo
